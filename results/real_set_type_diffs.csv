@@ -1,0 +1,181 @@
+body,dataset,set_type,metric,baseline,diff
+linear,cb,single,nll,soft-CORAL,-0.061215114593505815
+linear,humicroedit,single,nll,soft-CORAL,-0.017177772521972723
+linear,mhs,single,nll,soft-CORAL,-0.017794108390808083
+linear,scut,single,nll,soft-CORAL,-0.0058079123497010166
+linear,wikitox,single,nll,soft-CORAL,-0.05216666460037234
+linear,cb,single,nll,soft CE,0.010252308845519975
+linear,humicroedit,single,nll,soft CE,-0.0039046764373780185
+linear,mhs,single,nll,soft CE,0.030568420886993408
+linear,scut,single,nll,soft CE,0.007291352748870827
+linear,wikitox,single,nll,soft CE,0.02912064790725699
+linear,cb,single,nll,PLL-CORN,0.05422928333282462
+linear,humicroedit,single,nll,PLL-CORN,0.10648851394653314
+linear,mhs,single,nll,PLL-CORN,0.04656016826629639
+linear,scut,single,nll,PLL-CORN,0.05477807521820066
+linear,wikitox,single,nll,PLL-CORN,0.006447577476501376
+linear,cb,single,set_mae_med,soft-CORAL,0.11287546157836914
+linear,humicroedit,single,set_mae_med,soft-CORAL,-0.1675315797328949
+linear,mhs,single,set_mae_med,soft-CORAL,-0.022092348337173495
+linear,scut,single,set_mae_med,soft-CORAL,-0.022824853658676147
+linear,wikitox,single,set_mae_med,soft-CORAL,-0.047849750518798806
+linear,cb,single,set_mae_med,soft CE,0.30978760719299303
+linear,humicroedit,single,set_mae_med,soft CE,-0.15373229384422304
+linear,mhs,single,set_mae_med,soft CE,0.01176651120185851
+linear,scut,single,set_mae_med,soft CE,-0.006061238050460799
+linear,wikitox,single,set_mae_med,soft CE,-0.004630303382873513
+linear,cb,single,set_mae_med,PLL-CORN,0.007577705383300826
+linear,humicroedit,single,set_mae_med,PLL-CORN,0.022782576084136974
+linear,mhs,single,set_mae_med,PLL-CORN,0.022002810239791837
+linear,scut,single,set_mae_med,PLL-CORN,-0.006808322668075545
+linear,wikitox,single,set_mae_med,PLL-CORN,-0.0003853797912597434
+linear,cb,contig,nll,soft-CORAL,-0.0066543340682982954
+linear,humicroedit,contig,nll,soft-CORAL,-0.00902092456817627
+linear,mhs,contig,nll,soft-CORAL,0.009173536300659091
+linear,scut,contig,nll,soft-CORAL,0.008195376396179288
+linear,wikitox,contig,nll,soft-CORAL,-0.00013816356658935547
+linear,cb,contig,nll,soft CE,-0.02987682819366455
+linear,humicroedit,contig,nll,soft CE,-0.006460905075073242
+linear,mhs,contig,nll,soft CE,0.020290279388427646
+linear,scut,contig,nll,soft CE,-0.000417542457580522
+linear,wikitox,contig,nll,soft CE,0.015732026100158558
+linear,cb,contig,nll,PLL-CORN,-0.14712591171264644
+linear,humicroedit,contig,nll,PLL-CORN,-0.11223065853118896
+linear,mhs,contig,nll,PLL-CORN,-0.08572566509246826
+linear,scut,contig,nll,PLL-CORN,-0.1556300878524779
+linear,wikitox,contig,nll,PLL-CORN,-0.09994812011718768
+linear,cb,contig,set_mae_med,soft-CORAL,0.09367791414260862
+linear,humicroedit,contig,set_mae_med,soft-CORAL,0.023593342304229742
+linear,mhs,contig,set_mae_med,soft-CORAL,-0.013131804764270782
+linear,scut,contig,set_mae_med,soft-CORAL,-0.009409790486097337
+linear,wikitox,contig,set_mae_med,soft-CORAL,-0.0025369089096784585
+linear,cb,contig,set_mae_med,soft CE,0.11681703329086301
+linear,humicroedit,contig,set_mae_med,soft CE,0.02485653907060624
+linear,mhs,contig,set_mae_med,soft CE,0.0028919860720634516
+linear,scut,contig,set_mae_med,soft CE,0.0038445241749286638
+linear,wikitox,contig,set_mae_med,soft CE,0.0003628872334957116
+linear,cb,contig,set_mae_med,PLL-CORN,0.043447589874267556
+linear,humicroedit,contig,set_mae_med,PLL-CORN,-0.04583339989185331
+linear,mhs,contig,set_mae_med,PLL-CORN,-0.0164247527718544
+linear,scut,contig,set_mae_med,PLL-CORN,-0.006125405430793762
+linear,wikitox,contig,set_mae_med,PLL-CORN,-0.0015500776469707482
+linear,cb,gapped,nll,soft-CORAL,0.02547962665557857
+linear,humicroedit,gapped,nll,soft-CORAL,0.0070004701614381215
+linear,mhs,gapped,nll,soft-CORAL,-0.046191430091858
+linear,scut,gapped,nll,soft-CORAL,-0.09426488876342765
+linear,wikitox,gapped,nll,soft-CORAL,-0.2025917291641237
+linear,cb,gapped,nll,soft CE,0.011242580413818315
+linear,humicroedit,gapped,nll,soft CE,0.0022965431213379794
+linear,mhs,gapped,nll,soft CE,-0.015102481842041104
+linear,scut,gapped,nll,soft CE,-0.054422068595886275
+linear,wikitox,gapped,nll,soft CE,-0.09476101398468018
+linear,cb,gapped,nll,PLL-CORN,-0.03475320339202881
+linear,humicroedit,gapped,nll,PLL-CORN,-0.010781240463256792
+linear,mhs,gapped,nll,PLL-CORN,-0.14174787998199467
+linear,scut,gapped,nll,PLL-CORN,-0.0994096755981444
+linear,wikitox,gapped,nll,PLL-CORN,-0.24237601757049587
+linear,cb,gapped,set_mae_med,soft-CORAL,-0.010948264598846458
+linear,humicroedit,gapped,set_mae_med,soft-CORAL,-0.11693578958511353
+linear,mhs,gapped,set_mae_med,soft-CORAL,0.016265875101089455
+linear,scut,gapped,set_mae_med,soft-CORAL,0.004253399372100841
+linear,wikitox,gapped,set_mae_med,soft-CORAL,-0.03863290548324583
+linear,cb,gapped,set_mae_med,soft CE,0.007860231399536066
+linear,humicroedit,gapped,set_mae_med,soft CE,-0.11636319756507874
+linear,mhs,gapped,set_mae_med,soft CE,0.007833635807037331
+linear,scut,gapped,set_mae_med,soft CE,0.019435173273086526
+linear,wikitox,gapped,set_mae_med,soft CE,0.022057271003723122
+linear,cb,gapped,set_mae_med,PLL-CORN,-0.024583303928375266
+linear,humicroedit,gapped,set_mae_med,PLL-CORN,0.07854392528533932
+linear,mhs,gapped,set_mae_med,PLL-CORN,0.04621017575263975
+linear,scut,gapped,set_mae_med,PLL-CORN,0.025220024585723866
+linear,wikitox,gapped,set_mae_med,PLL-CORN,0.02251411676406867
+mlp,cb,single,nll,soft-CORAL,-0.016499233245849787
+mlp,humicroedit,single,nll,soft-CORAL,-0.026125764846801736
+mlp,mhs,single,nll,soft-CORAL,-0.05678209066390982
+mlp,scut,single,nll,soft-CORAL,-0.03534158468246462
+mlp,wikitox,single,nll,soft-CORAL,-0.07921664714813226
+mlp,cb,single,nll,soft CE,0.08852641582488996
+mlp,humicroedit,single,nll,soft CE,-0.015637660026550315
+mlp,mhs,single,nll,soft CE,-0.000862526893615656
+mlp,scut,single,nll,soft CE,-0.007592213153839067
+mlp,wikitox,single,nll,soft CE,0.004891812801361084
+mlp,cb,single,nll,PLL-CORN,-0.060749697685241744
+mlp,humicroedit,single,nll,PLL-CORN,0.056898856163024925
+mlp,mhs,single,nll,PLL-CORN,0.0004523277282715288
+mlp,scut,single,nll,PLL-CORN,0.06920100450515743
+mlp,wikitox,single,nll,PLL-CORN,-0.0037981271743774414
+mlp,cb,single,set_mae_med,soft-CORAL,-0.0766181707382203
+mlp,humicroedit,single,set_mae_med,soft-CORAL,0.14311242699623106
+mlp,mhs,single,set_mae_med,soft-CORAL,-0.020037168264389005
+mlp,scut,single,set_mae_med,soft-CORAL,-0.01512681841850283
+mlp,wikitox,single,set_mae_med,soft-CORAL,-0.01909589171409609
+mlp,cb,single,set_mae_med,soft CE,-0.022036695480346813
+mlp,humicroedit,single,set_mae_med,soft CE,-0.0025636911392212802
+mlp,mhs,single,set_mae_med,soft CE,0.005216926336288452
+mlp,scut,single,set_mae_med,soft CE,0.0002817451953887884
+mlp,wikitox,single,set_mae_med,soft CE,0.0015922605991363636
+mlp,cb,single,set_mae_med,PLL-CORN,-0.006430220603943049
+mlp,humicroedit,single,set_mae_med,PLL-CORN,0.16457272768020625
+mlp,mhs,single,set_mae_med,PLL-CORN,0.02342422604560851
+mlp,scut,single,set_mae_med,PLL-CORN,0.0009410858154296764
+mlp,wikitox,single,set_mae_med,PLL-CORN,0.00017644166946412243
+mlp,cb,contig,nll,soft-CORAL,0.0010153293609618252
+mlp,humicroedit,contig,nll,soft-CORAL,0.004188990592956632
+mlp,mhs,contig,nll,soft-CORAL,-0.022279667854308904
+mlp,scut,contig,nll,soft-CORAL,-0.005909156799316584
+mlp,wikitox,contig,nll,soft-CORAL,-0.011334753036499112
+mlp,cb,contig,nll,soft CE,0.002480959892272816
+mlp,humicroedit,contig,nll,soft CE,-0.00044655799865722656
+mlp,mhs,contig,nll,soft CE,0.0003816604614259589
+mlp,scut,contig,nll,soft CE,0.0001328945159910777
+mlp,wikitox,contig,nll,soft CE,0.00015990734100346238
+mlp,cb,contig,nll,PLL-CORN,-0.1096290111541749
+mlp,humicroedit,contig,nll,PLL-CORN,-0.10169703960418697
+mlp,mhs,contig,nll,PLL-CORN,-0.04872884750366202
+mlp,scut,contig,nll,PLL-CORN,-0.16822304725646986
+mlp,wikitox,contig,nll,PLL-CORN,-0.07705199718475342
+mlp,cb,contig,set_mae_med,soft-CORAL,-0.04186888933181754
+mlp,humicroedit,contig,set_mae_med,soft-CORAL,-0.07903340905904771
+mlp,mhs,contig,set_mae_med,soft-CORAL,-0.009566636383533472
+mlp,scut,contig,set_mae_med,soft-CORAL,-0.013316715881228444
+mlp,wikitox,contig,set_mae_med,soft-CORAL,-0.002680974081158638
+mlp,cb,contig,set_mae_med,soft CE,-0.07729933261871336
+mlp,humicroedit,contig,set_mae_med,soft CE,-0.016229467093944544
+mlp,mhs,contig,set_mae_med,soft CE,0.002674560248851779
+mlp,scut,contig,set_mae_med,soft CE,-0.005282287672162059
+mlp,wikitox,contig,set_mae_med,soft CE,-7.051862776279519e-05
+mlp,cb,contig,set_mae_med,PLL-CORN,-0.010322678089141779
+mlp,humicroedit,contig,set_mae_med,PLL-CORN,-0.07994492799043657
+mlp,mhs,contig,set_mae_med,PLL-CORN,-0.019816170632839192
+mlp,scut,contig,set_mae_med,PLL-CORN,-0.020361886546015742
+mlp,wikitox,contig,set_mae_med,PLL-CORN,-0.004707129299640657
+mlp,cb,gapped,nll,soft-CORAL,0.049001312255859464
+mlp,humicroedit,gapped,nll,soft-CORAL,0.008377456665038974
+mlp,mhs,gapped,nll,soft-CORAL,-0.0015000820159911665
+mlp,scut,gapped,nll,soft-CORAL,0.008821821212768421
+mlp,wikitox,gapped,nll,soft-CORAL,-0.10603518486022923
+mlp,cb,gapped,nll,soft CE,-0.0015233755111694336
+mlp,humicroedit,gapped,nll,soft CE,0.015152716636657626
+mlp,mhs,gapped,nll,soft CE,-0.0037255048751829722
+mlp,scut,gapped,nll,soft CE,0.025222373008727983
+mlp,wikitox,gapped,nll,soft CE,-0.0025249004364011896
+mlp,cb,gapped,nll,PLL-CORN,0.051628828048706055
+mlp,humicroedit,gapped,nll,PLL-CORN,-0.030668997764587536
+mlp,mhs,gapped,nll,PLL-CORN,-0.04745907783508296
+mlp,scut,gapped,nll,PLL-CORN,-0.21721386909484863
+mlp,wikitox,gapped,nll,PLL-CORN,-0.19711542129516602
+mlp,cb,gapped,set_mae_med,soft-CORAL,-0.03901904821395874
+mlp,humicroedit,gapped,set_mae_med,soft-CORAL,0.17532850503921504
+mlp,mhs,gapped,set_mae_med,soft-CORAL,-0.007465761899948131
+mlp,scut,gapped,set_mae_med,soft-CORAL,0.0394350409507751
+mlp,wikitox,gapped,set_mae_med,soft-CORAL,-0.0371625781059266
+mlp,cb,gapped,set_mae_med,soft CE,-0.003921103477477983
+mlp,humicroedit,gapped,set_mae_med,soft CE,0.011000359058380038
+mlp,mhs,gapped,set_mae_med,soft CE,-0.003401505947113026
+mlp,scut,gapped,set_mae_med,soft CE,0.05266425013542175
+mlp,wikitox,gapped,set_mae_med,soft CE,-0.008888483047485352
+mlp,cb,gapped,set_mae_med,PLL-CORN,0.04616825580596928
+mlp,humicroedit,gapped,set_mae_med,PLL-CORN,0.19367749691009517
+mlp,mhs,gapped,set_mae_med,PLL-CORN,0.05721261501312258
+mlp,scut,gapped,set_mae_med,PLL-CORN,0.06166218519210814
+mlp,wikitox,gapped,set_mae_med,PLL-CORN,0.01320041418075557

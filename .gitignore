@@ -1,0 +1,28 @@
+# environments
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# data, features, run logs and model caches (default data root when SCB_DATA is unset);
+# never commit the datasets: they are third-party releases with their own licences
+data/
+*.npz
+*.parquet
+
+# local tool settings
+.claude/settings.local.json
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

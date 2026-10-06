@@ -1,0 +1,5 @@
+# normalise line endings in the repository; check out with the platform default
+* text=auto
+*.png binary
+*.npz binary
+*.parquet binary

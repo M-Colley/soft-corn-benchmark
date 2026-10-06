@@ -1,0 +1,9 @@
+# Minimal environment for the test suite (CPU only). CI installs CPU PyTorch first:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch>=2.4
+numpy>=1.26
+scipy>=1.11
+pandas>=2.2
+coral-pytorch>=1.4
+pytest>=8
+ruff>=0.5

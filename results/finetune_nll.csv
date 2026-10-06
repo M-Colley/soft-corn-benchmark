@@ -1,0 +1,16 @@
+dataset,method,finetune,linear
+cb,soft CE,1.683 ± 0.005,1.845 ± 0.011
+cb,soft-CORAL,1.842 ± 0.043,1.842 ± 0.012
+cb,soft-CORN,1.711 ± 0.030,1.840 ± 0.009
+humicroedit,soft CE,1.256 ± 0.001,1.259 ± 0.004
+humicroedit,soft-CORAL,1.253 ± 0.004,1.255 ± 0.002
+humicroedit,soft-CORN,1.251 ± 0.000,1.253 ± 0.005
+mhs,soft CE,1.063 ± 0.004,1.133 ± 0.007
+mhs,soft-CORAL,1.148 ± 0.006,1.135 ± 0.005
+mhs,soft-CORN,1.068 ± 0.003,1.133 ± 0.008
+scut,soft CE,1.101 ± 0.012,1.092 ± 0.009
+scut,soft-CORAL,1.132 ± 0.009,1.085 ± 0.008
+scut,soft-CORN,1.090 ± 0.015,1.090 ± 0.011
+wikitox,soft CE,0.980 ± 0.008,1.039 ± 0.007
+wikitox,soft-CORAL,1.024 ± 0.005,1.051 ± 0.006
+wikitox,soft-CORN,0.983 ± 0.010,1.038 ± 0.006

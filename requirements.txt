@@ -1,0 +1,36 @@
+# Full environment for downloading data, building features, running the benchmark and analysis.
+# Install the PyTorch build that matches your GPU first (https://pytorch.org/get-started/locally/),
+# e.g.  pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+# then  pip install -r requirements.txt
+# Developed with Python 3.13, torch 2.13, transformers 5.11, pandas 3.0.
+
+# core
+torch>=2.4
+numpy>=1.26
+scipy>=1.11
+pandas>=2.2
+pyarrow>=14
+coral-pytorch>=1.4
+
+# statistics, tables, figures
+autorank>=1.2
+baycomp>=1.0.3
+matplotlib>=3.8
+tabulate>=0.9
+
+# data download and feature building
+requests>=2.31
+huggingface_hub>=0.23
+gdown>=5.1
+openpyxl>=3.1
+pillow>=10
+
+# encoders (frozen features and fine-tuning)
+torchvision>=0.19
+transformers>=4.44
+sentence-transformers>=3.0
+open_clip_torch>=2.24
+
+# development
+pytest>=8
+ruff>=0.5
