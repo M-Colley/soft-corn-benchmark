@@ -1,7 +1,6 @@
 # soft-CORN benchmark
 
-<!-- After pushing to GitHub, add the CI badge (replace OWNER/REPO):
-[![tests](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml) -->
+[![tests](https://github.com/M-Colley/soft-corn-benchmark/actions/workflows/ci.yml/badge.svg)](https://github.com/M-Colley/soft-corn-benchmark/actions/workflows/ci.yml)
 
 **Results and verdict: [REPORT.md](REPORT.md)** (tables in `results/`, figures in `figures/`).
 **Next experiments: [FUTURE_WORK.md](FUTURE_WORK.md).** Notes for Claude Code: [CLAUDE.md](CLAUDE.md).
