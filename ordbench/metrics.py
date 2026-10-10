@@ -15,12 +15,26 @@ Held-out annotators (ratings never used to build any label or to select a model)
 Point predictions use the median of the predicted PMF ("med", the CORN/CORAL decision rule)
 or its mode ("mode").
 
+Set-valued predictions and calibration (what an application that shows an acceptance set needs):
+    int{50,80,90}_*   the narrowest contiguous interval of levels whose predicted mass is at least
+                the nominal level (ties: larger mass, then lower start), scored by
+                  width    number of levels in the interval
+                  jdist    Jaccard distance to the observed set
+                  hocov    share of held-out ratings inside the interval (calibrated: >= nominal)
+                  iscore   width + (2 / (1 - level)) * expected distance of a held-out rating to the
+                           interval (Winkler-type interval score; lower is better, and only
+                           approximately proper because the interval is a highest-density one)
+    ho_ece            ordinal expected calibration error: mean over k of the binned gap between the
+                predicted P(y > k) and the held-out raters' share above k, items weighted equally
+
 `prepare` precomputes everything that does not depend on the predictions, so `evaluate` runs
 without host-device synchronisation.
 """
 import torch
 
 SET_TYPES = ("single", "contig", "gapped")
+LEVELS = (0.5, 0.8, 0.9)        # nominal mass of the predicted intervals
+ECE_BINS = 10
 
 
 def set_types(mask):
@@ -52,6 +66,49 @@ def _set_dist(pred, mask):
 def _sd(pmf):
     k = torch.arange(pmf.shape[-1], device=pmf.device, dtype=pmf.dtype)
     return ((pmf * k ** 2).sum(-1) - (pmf * k).sum(-1) ** 2).clamp_min(0).sqrt()
+
+
+def best_interval(pmf, level):
+    """Narrowest contiguous interval [lo, hi] with mass >= level (ties: larger mass, then lower lo).
+    pmf (..., K) -> lo, hi (...). The full range always qualifies, so a choice always exists."""
+    K = pmf.shape[-1]
+    F0 = torch.cat([torch.zeros_like(pmf[..., :1]), torch.cumsum(pmf, -1)], -1)
+    mass = F0[..., None, 1:] - F0[..., :-1, None]                    # [..., a, b] = P(a <= y <= b)
+    a = torch.arange(K, device=pmf.device)[:, None]
+    b = torch.arange(K, device=pmf.device)[None, :]
+    ok = (b >= a) & (mass >= level - 1e-6)
+    score = torch.where(ok, (b - a + 1).to(pmf.dtype) - 0.5 * mass, float("inf"))
+    idx = score.flatten(-2).argmin(-1)
+    return idx // K, idx % K
+
+
+def _interval_metrics(pmf, ev, out):
+    mask, K = ev["mask"], pmf.shape[-1]
+    k = torch.arange(K, device=pmf.device)
+    for level in LEVELS:
+        tag = f"int{round(100 * level)}"
+        lo, hi = best_interval(pmf, level)
+        inside = (k >= lo[..., None]) & (k <= hi[..., None])
+        width = (hi - lo + 1).to(pmf.dtype)
+        inter = (inside & mask).sum(-1).to(pmf.dtype)
+        out[f"{tag}_width"] = width.mean(-1)
+        out[f"{tag}_jdist"] = (1 - inter / (mask.sum(-1) + width - inter)).mean(-1)
+        if "ho_w" in ev:
+            w, item = ev["ho_w"], ev["ho_item"]
+            out[f"{tag}_hocov"] = ((w * inside).sum(-1) * item).sum(-1)
+            miss = torch.maximum(lo[..., None] - k, k - hi[..., None]).clamp_min(0).to(pmf.dtype)
+            out[f"{tag}_iscore"] = ((width + 2 / (1 - level) * (w * miss).sum(-1)) * item).sum(-1)
+
+
+def _ho_ece(F_hat, ev, bins=ECE_BINS):
+    """sum_b (weight of bin b) * |mean predicted P(y > k) - mean held-out share above k| over the
+    equal-width bins of the predicted probability, averaged over k = 0..K-2."""
+    g = (1 - F_hat[..., :-1]).clamp(0, 1)                              # (M, N, K-1)
+    r = 1 - ev["ho_F"][..., :-1]                                       # (N, K-1)
+    cell = (g * bins).long().clamp_max(bins - 1)[..., None] == torch.arange(bins, device=g.device)
+    w = cell * ev["ho_item"][None, :, None, None]                      # (M, N, K-1, bins)
+    gap = (w * (g - r)[..., None]).sum(1).abs().sum(-1)                # (M, K-1)
+    return gap.mean(-1)
 
 
 def prepare(p, mask, ho_counts=None, min_group=5):
@@ -106,6 +163,8 @@ def evaluate(logp, ev):
         out["ho_emd"] = ((F_hat - ev["ho_F"]).abs().sum(-1) * item).sum(-1)
         dist = (med[..., None] - torch.arange(K, device=pmf.device)).abs().float()
         out["ho_mae"] = ((w * dist).sum(-1) * item).sum(-1)
+        out["ho_ece"] = _ho_ece(F_hat, ev)
+    _interval_metrics(pmf, ev, out)
 
     for name, wg in ev["groups"].items():
         out[f"set_mae_med_{name}"] = (d_med * wg).sum(-1)

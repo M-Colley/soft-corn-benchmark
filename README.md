@@ -23,10 +23,12 @@ are committed.
 git clone <your-repo-url> soft-corn-benchmark && cd soft-corn-benchmark
 python -m venv .venv && source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126   # match your CUDA
-pip install -r requirements.txt
+pip install -r requirements.txt          # or requirements-lock.txt for the exact versions of the last full run
 export SCB_DATA=/path/with/space/soft-corn-benchmark-data  # Windows: setx SCB_DATA D:\...
 python -m pytest -q                                         # should pass (the CUDA-only test needs a GPU)
 ```
+
+RTX 50-series (Blackwell) cards need a CUDA 12.8+ build of PyTorch, e.g. `--index-url https://download.pytorch.org/whl/cu130`.
 
 Then either rebuild the data:
 
@@ -49,9 +51,14 @@ python scripts/02_build.py           # frozen-encoder features + set-valued labe
 python scripts/03_run.py             # real-data benchmark (resumable; skips finished cells)
 python scripts/04_synthetic.py       # synthetic benchmark (resumable)
 python scripts/06_finetune.py        # fine-tuned backbones (resumable)
+python scripts/07_checks.py          # grid-edge checks and hyperparameter sensitivity -> results/checks.md
 python scripts/05_analyze.py         # selection, tables, tests, figures -> results/, figures/
-python -m pytest -q                  # 32 tests incl. a CPU end-to-end pipeline smoke test
+python -m pytest -q                  # 35+ tests incl. a CPU end-to-end pipeline smoke test
 ```
+
+`scripts/run_frozen.sh` and `scripts/run_finetune.sh` run every stage of the frozen-feature and
+fine-tuning benchmarks one after another (resumable; stages are listed in the script headers).
+Run them sequentially: two jobs on one GPU time-slice it and finish no sooner than one after the other.
 
 ## Design
 
@@ -104,7 +111,11 @@ Splits: 20% test, 10% validation; training sizes {128, 512, 2048, 8192, full}, n
 
 **Metrics** (`ordbench/metrics.py`). Set-MAE / set-accuracy (median and mode decoding), NLL
 against the soft target, partial-label NLL, RPS, EMD, spread correlation, held-out-rater
-NLL / RPS / EMD / MAE, and per set type (singleton / contiguous / gapped).
+NLL / RPS / EMD / MAE, and per set type (singleton / contiguous / gapped). Calibration and
+set-valued predictions: ordinal ECE against held-out raters (`ho_ece`) and, for the narrowest
+contiguous interval holding 50 / 80 / 90 % of the predicted mass, its width, the share of held-out
+ratings it covers, its Jaccard distance to the observed set and an interval score
+(`int{50,80,90}_{width,hocov,jdist,iscore}`).
 
 **Statistics** (`scripts/05_analyze.py`). Per problem: Nadeau–Bengio corrected resampled t-test
 over seeds. Across problems: Friedman + Nemenyi (autorank) and the Bayesian signed-rank test

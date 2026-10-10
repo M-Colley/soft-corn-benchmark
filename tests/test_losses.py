@@ -10,7 +10,7 @@ from coral_pytorch.losses import corn_loss
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ordbench import losses as L  # noqa: E402
-from ordbench.metrics import evaluate, prepare, set_types  # noqa: E402
+from ordbench.metrics import best_interval, evaluate, prepare, set_types  # noqa: E402
 
 K = 5
 
@@ -188,6 +188,81 @@ def test_metrics_match_direct_computation():
     nll_i = -(p * logp).sum(-1)
     for gi, name in enumerate(("single", "contig", "gapped")):
         assert torch.allclose(out[f"nll_{name}"], nll_i[:, t == gi].mean(-1))
+
+
+def test_best_interval_matches_brute_force():
+    g = torch.Generator().manual_seed(4)
+    pmf = torch.softmax(torch.randn(300, K, generator=g) * 1.5, -1)
+    for level in (0.5, 0.8, 0.9, 1.0):
+        lo, hi = best_interval(pmf, level)
+        for i in range(len(pmf)):
+            best = min(((b - a, -float(pmf[i, a:b + 1].sum()), a) for a in range(K) for b in range(a, K)
+                        if float(pmf[i, a:b + 1].sum()) >= level - 1e-6))
+            assert (int(lo[i]), int(hi[i])) == (best[2], best[2] + best[0]), (level, i)
+
+
+def test_interval_and_calibration_metrics_match_direct_computation():
+    g = torch.Generator().manual_seed(5)
+    N = 400
+    mask, p = random_sets(N, K, g)
+    ho = torch.randint(0, 4, (N, K), generator=g).double()
+    ho[:60] = 0
+    pmf = torch.softmax(torch.randn(2, N, K, generator=g), -1)
+    out = evaluate(pmf.log(), prepare(p, mask, ho))
+    has = ho.sum(-1) > 0
+    w = ho / ho.sum(-1, keepdim=True).clamp_min(1)
+    for level in (0.5, 0.8, 0.9):
+        tag = f"int{round(100 * level)}"
+        lo, hi = best_interval(pmf, level)
+        for m in range(2):
+            cov, score, jd, wd = [], [], [], []
+            for i in range(N):
+                ks = torch.arange(K)
+                inside = (ks >= lo[m, i]) & (ks <= hi[m, i])
+                width = float(hi[m, i] - lo[m, i] + 1)
+                jd.append(1 - float((inside & mask[i]).sum()) / float((inside | mask[i]).sum()))
+                wd.append(width)
+                if has[i]:
+                    miss = torch.clamp(torch.maximum(lo[m, i] - ks, ks - hi[m, i]), min=0).double()
+                    cov.append(float((w[i] * inside).sum()))
+                    score.append(width + 2 / (1 - level) * float((w[i] * miss).sum()))
+            assert abs(float(out[f"{tag}_width"][m]) - sum(wd) / N) < 1e-9
+            assert abs(float(out[f"{tag}_jdist"][m]) - sum(jd) / N) < 1e-9
+            assert abs(float(out[f"{tag}_hocov"][m]) - sum(cov) / len(cov)) < 1e-6   # item weights are float32
+            assert abs(float(out[f"{tag}_iscore"][m]) - sum(score) / len(score)) < 1e-6
+    # ECE against a plain loop over bins
+    Fh = torch.cumsum(pmf, -1)
+    for m in range(2):
+        per_k = []
+        for k in range(K - 1):
+            gk = (1 - Fh[m, has, k])
+            rk = 1 - torch.cumsum(w[has], -1)[:, k]
+            b = torch.clamp((gk * 10).long(), max=9)
+            per_k.append(sum(float((b == j).sum()) / int(has.sum()) * abs(float(gk[b == j].mean() - rk[b == j].mean()))
+                             for j in range(10) if (b == j).any()))
+        assert abs(float(out["ho_ece"][m]) - sum(per_k) / (K - 1)) < 1e-6
+
+
+def test_calibration_metrics_reference_cases():
+    N = 50
+    mask = torch.zeros(N, K).bool()
+    mask[:, 2] = True
+    p = mask.double()
+    # held-out raters distributed exactly as the prediction: no calibration gap, intervals cover >= level
+    pmf = torch.softmax(torch.randn(1, N, K, generator=torch.Generator().manual_seed(6)), -1)
+    out = evaluate(pmf.log(), prepare(p, mask, pmf[0]))
+    assert out["ho_ece"].item() < 1e-6
+    for tag, level in (("int50", 0.5), ("int80", 0.8), ("int90", 0.9)):
+        assert out[f"{tag}_hocov"].item() >= level - 1e-9
+    # a constant, overconfident prediction against raters that split evenly: P(y > 2) is 1, share is 0.5
+    pmf = torch.zeros(1, N, K, dtype=torch.float64)
+    pmf[..., 4] = 1.0
+    ho = torch.zeros(N, K, dtype=torch.float64)
+    ho[:, [0, 4]] = 1.0
+    out = evaluate(pmf.clamp_min(1e-12).log(), prepare(p, mask, ho))
+    # P(y > k) = 1 for k < 4 and the raters' share above k is 0.5 for k < 4: gap 0.5 at 4 of 4 thresholds
+    assert abs(out["ho_ece"].item() - 0.5) < 1e-6
+    assert out["int80_width"].item() == 1 and abs(out["int80_hocov"].item() - 0.5) < 1e-6
 
 
 def _argmin_pmf(fn, head, labels, w, gen):

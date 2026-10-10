@@ -29,12 +29,14 @@ LABEL = {"soft_corn": "soft-CORN", "soft_coral": "soft-CORAL", "soft_or": "soft-
          "oldl_cad": "OLDL-CAD", "oldl_qfd": "OLDL-QFD", "oldl_cjs": "OLDL-CJS",
          "pll_softmax": "PLL-softmax", "pll_corn": "PLL-CORN"}
 # lower is better for all of these
-METRICS = ["set_mae_med", "nll", "ho_nll", "rps", "ho_rps", "emd", "pll"]
+METRICS = ["set_mae_med", "nll", "ho_nll", "rps", "ho_rps", "emd", "pll", "ho_ece", "int80_iscore", "int80_jdist"]
 ROPE = {"set_mae_med": 0.005, "nll": 0.005, "ho_nll": 0.005, "rps": 0.001, "ho_rps": 0.001,
-        "emd": 0.005, "pll": 0.005, "kl_t": 0.002, "kl_pi": 0.002}
+        "emd": 0.005, "pll": 0.005, "kl_t": 0.002, "kl_pi": 0.002,
+        "ho_ece": 0.005, "int80_iscore": 0.05, "int90_iscore": 0.05, "int80_jdist": 0.01}
 # each test metric is read at the step/config chosen by its validation counterpart
 MATCH = {"set_mae_med": "set_mae", "set_acc_med": "set_mae", "nll": "nll", "ho_nll": "nll", "pll": "nll",
-         "rps": "rps", "ho_rps": "rps", "emd": "rps"}
+         "rps": "rps", "ho_rps": "rps", "emd": "rps", "ho_ece": "nll", "kl_t": "nll", "kl_pi": "nll"}
+MATCH.update({f"int{q}_{k}": "nll" for q in (50, 80, 90) for k in ("width", "jdist", "hocov", "iscore")})
 # figure series: fixed categorical order from the dataviz reference palette (light mode)
 # (colour follows the method in every figure; OLDL is represented by its strongest variant, QFD)
 SERIES = ["soft_corn", "soft_coral", "ce_soft", "oldl_qfd", "pll_corn", "corn_hard", "soft_or"]
@@ -283,39 +285,54 @@ def m_ablation(real, lines, sizes=(512, 2048)):
     plt.close(fig)
 
 
-def finetune_section(real, lines):
-    """Fine-tuned backbones (scripts/06_finetune.py) against the frozen linear probe at the same
-    training size (2,048 items; CommitmentBank's full 840)."""
-    ft_dir = RUNS / "finetune"
+FT_BACKBONES = ("sentence-transformers/all-mpnet-base-v2", "open_clip ViT-B-16/laion2b_s34b_b88k")
+
+
+def finetune_section(real, lines, ft_dir=None, tag="finetune"):
+    """Fine-tuned backbones (scripts/06_finetune.py) against the frozen linear probe on the same
+    training items. `ft_dir` is a run folder (default results/finetune); other folders hold variants
+    (LP-FT head initialisation, other backbones) and are reported under their own `tag`. Variants
+    with another backbone have no frozen counterpart. Returns the selected runs, or None."""
+    ft_dir = ft_dir or RUNS / "finetune"
     if not (ft_dir.exists() and any(ft_dir.glob("*.npz"))):
-        return
+        return None
     ft = collect(ft_dir)
-    ft.to_parquet(RUNS / "finetune_selected.parquet")
+    ft.to_parquet(RUNS / f"{tag}_selected.parquet")
     methods = sorted(ft.method.unique(), key=lambda m: list(LABEL).index(m))
-    keys = ft[["dataset", "n_train"]].drop_duplicates()
-    fr = real[(real.body == "linear") & real.method.isin(methods)].merge(keys, on=["dataset", "n_train"])
-    df = pd.concat([ft, fr], ignore_index=True)
+    frozen = "backbone" not in ft or ft.backbone.isin(FT_BACKBONES).all()
+    if frozen:
+        keys = ft[["dataset", "n_train"]].drop_duplicates()
+        fr = real[(real.body == "linear") & real.method.isin(methods)].merge(keys, on=["dataset", "n_train"])
+        df = pd.concat([ft, fr], ignore_index=True)
+    else:
+        df = ft
     sizes = ", ".join(f"{ds} {', '.join(map(str, sorted(g.n_train.unique())))}" for ds, g in ft.groupby("dataset"))
-    lines += [f"## Fine-tuned backbones (training sizes: {sizes}; seeds: {ft.seed.nunique()})\n",
-              "Backbone and loss trained end to end (all-mpnet-base-v2 for text, OpenCLIP ViT-B/16 for SCUT), "
-              "compared with the frozen linear probe on the same training items. Learning rate and epoch "
+    extra = "".join(f"; {k}: {', '.join(sorted(map(str, ft[k].dropna().unique())))}"
+                    for k in ("init", "backbone") if k in ft and ft[k].notna().any())
+    lines += [f"## Fine-tuned backbones, {tag} (training sizes: {sizes}; seeds: {ft.seed.nunique()}{extra})\n",
+              "Backbone and loss trained end to end, compared with the frozen linear probe on the same training "
+              "items where the backbone is the one used for the frozen features. Learning rate and epoch "
               "selected on validation; each metric read at its matched selection.\n"]
-    for metric in ("nll", "ho_nll", "set_mae_med"):
-        crit = MATCH[metric]
-        d = df[df.select_by == crit]
+    for metric in ("nll", "ho_nll", "set_mae_med", "ho_ece", "int80_iscore"):
+        if metric not in df or df[metric].isna().all():
+            continue
+        d = df[df.select_by == MATCH[metric]]
         g = d.groupby(["dataset", "n_train", "body", "method"])[metric].agg(["mean", "std"]).reset_index()
         g["cell"] = g.apply(lambda r: fmt(r["mean"], r["std"]), axis=1)
         g["method"] = g.method.map(LABEL)
         piv = g.pivot_table(index=["dataset", "n_train", "method"], columns="body", values="cell", aggfunc="first")
-        piv.to_csv(TABLES / f"finetune_{metric}.csv")
-        lines += [f"### {metric}: frozen linear probe vs fine-tuned (mean ± sd over seeds)\n", md_table(piv), ""]
-    ftt = ft.copy()
-    for metric in ("nll", "ho_nll", "set_mae_med", "rps"):
-        pw = pairwise(ftt, ["dataset", "n_train"], metric, MATCH[metric], [m for m in methods if m != PROPOSED])
+        piv.to_csv(TABLES / f"{tag}_{metric}.csv")
+        lines += [f"### {metric}: frozen linear probe vs fine-tuned (mean ± sd over seeds)\n" if frozen
+                  else f"### {metric}: fine-tuned (mean ± sd over seeds)\n", md_table(piv), ""]
+    for metric in ("nll", "ho_nll", "set_mae_med", "rps", "ho_ece", "int80_iscore"):
+        if metric not in ft or ft[metric].isna().all():
+            continue
+        pw = pairwise(ft, ["dataset", "n_train"], metric, MATCH[metric], [m for m in methods if m != PROPOSED])
         pw["baseline"] = pw.baseline.map(LABEL)
-        pw.to_csv(TABLES / f"pairwise_finetune_{metric}.csv", index=False)
-        lines += [f"### fine-tuned: soft-CORN vs baselines on {metric} (problems = datasets; W/T/L per dataset by "
-                  "corrected resampled t-test over 3 seeds)\n", pw.to_markdown(index=False, floatfmt=".3f"), ""]
+        pw.to_csv(TABLES / f"pairwise_{tag}_{metric}.csv", index=False)
+        lines += [f"### {tag}: soft-CORN vs baselines on {metric} (problems = dataset x training size; W/T/L per "
+                  f"problem by corrected resampled t-test over {ft.seed.nunique()} seeds)\n",
+                  pw.to_markdown(index=False, floatfmt=".3f"), ""]
     # per-dataset differences, so the direction on each dataset is visible
     rows = []
     for metric in ("nll", "set_mae_med"):
@@ -327,30 +344,154 @@ def finetune_section(real, lines):
                                      diff=d.loc[ds, PROPOSED] - d.loc[ds, b]))
     if rows:
         per = pd.DataFrame(rows).pivot_table(index=["metric", "baseline"], columns="dataset", values="diff")
-        lines += ["### fine-tuned: soft-CORN minus baseline per dataset (< 0 favours soft-CORN)\n", md_table(per), ""]
+        lines += [f"### {tag}: soft-CORN minus baseline per dataset (< 0 favours soft-CORN)\n", md_table(per), ""]
     # figure: frozen vs fine-tuned test NLL, one panel per dataset, at each dataset's most-run size
     d = df[df.select_by == "nll"]
     main_n = ft.groupby("dataset").n_train.agg(lambda s: s.value_counts().idxmax())
     d = d[d.n_train == d.dataset.map(main_n)]
     datasets = [x for x in DATASET_TITLE if x in set(d.dataset)]
+    bodies = ["linear", "finetune"] if frozen else ["finetune"]
     fig, axes = plt.subplots(1, len(datasets), figsize=(2.3 * len(datasets), 2.8), squeeze=False)
     for ax, ds in zip(axes[0], datasets):
         g = d[d.dataset == ds].groupby(["body", "method"]).nll.agg(["mean", "sem"]).reset_index()
         for k, m in enumerate(methods):
-            t = g[g.method == m].set_index("body").reindex(["linear", "finetune"])
-            x = np.array([0, 1]) + (k - 1) * 0.06
+            t = g[g.method == m].set_index("body").reindex(bodies)
+            x = np.arange(len(bodies)) + (k - len(methods) / 2) * 0.06
             ax.errorbar(x, t["mean"], yerr=t["sem"], marker="o", ms=5, lw=1.8, capsize=2.5, color=COLOR_OF[m],
                         label=LABEL[m], zorder=3 if m == PROPOSED else 2)
-        ax.set_xticks([0, 1])
-        ax.set_xticklabels(["frozen", "fine-tuned"], fontsize=8)
-        ax.set_xlim(-0.35, 1.35)
+        ax.set_xticks(range(len(bodies)))
+        ax.set_xticklabels(["frozen", "fine-tuned"][-len(bodies):], fontsize=8)
+        ax.set_xlim(-0.35, len(bodies) - 0.65)
         ax.set_title(DATASET_TITLE[ds], fontsize=9, color=INK)
         style(ax)
     axes[0][0].set_ylabel("test NLL", fontsize=8, color=INK2)
     h, lab = axes[0][0].get_legend_handles_labels()
     fig.legend(h, lab, loc="lower center", ncol=len(lab), fontsize=8, frameon=False, bbox_to_anchor=(0.5, -0.08))
     fig.tight_layout()
-    fig.savefig(FIGURES / "finetune_vs_frozen_nll.png", dpi=200, bbox_inches="tight")
+    fig.savefig(FIGURES / f"{tag}_vs_frozen_nll.png", dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    if ft.groupby("dataset").n_train.nunique().max() > 1:
+        finetune_size_figure(df, methods, datasets, FIGURES / f"{tag}_nll_vs_size.png")
+    return ft
+
+
+def finetune_size_figure(df, methods, datasets, path):
+    """Test NLL minus soft-CORAL's against training size: fine-tuned (solid) and, where it exists,
+    frozen linear probe (dashed)."""
+    d = df[df.select_by == "nll"]
+    fig, axes = plt.subplots(1, len(datasets), figsize=(2.6 * len(datasets), 2.8), squeeze=False)
+    for ax, ds in zip(axes[0], datasets):
+        for body, ls in (("finetune", "-"), ("linear", "--")):
+            t = d[(d.dataset == ds) & (d.body == body)].groupby(["n_train", "method"]).nll.mean().unstack()
+            if t.empty or "soft_coral" not in t:
+                continue
+            for m in methods:
+                if m != "soft_coral" and m in t:
+                    ax.plot(t.index, t[m] - t["soft_coral"], ls, color=COLOR_OF[m], marker="o", ms=3.5,
+                            lw=2.2 if m == PROPOSED else 1.4,
+                            label=f"{LABEL[m]} ({'fine-tuned' if body == 'finetune' else 'frozen'})")
+        ax.axhline(0, color=INK2, lw=0.8)
+        ax.set_xscale("log")
+        ax.set_title(DATASET_TITLE[ds], fontsize=9, color=INK)
+        ax.set_xlabel("training items", fontsize=8, color=INK2)
+        style(ax)
+    axes[0][0].set_ylabel("test NLL − soft-CORAL", fontsize=8, color=INK2)
+    h, lab = axes[0][0].get_legend_handles_labels()
+    fig.legend(h, lab, loc="lower center", ncol=min(len(lab), 4), fontsize=7, frameon=False,
+               bbox_to_anchor=(0.5, -0.12))
+    fig.tight_layout()
+    fig.savefig(path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
+
+def finetune_variants(frames, lines):
+    """soft-CORN minus soft-CORAL and minus soft CE, test NLL and set-MAE, for every fine-tuning folder,
+    dataset and training size: does the main fine-tuning result survive a change of protocol?"""
+    rows = []
+    for tag, ft in frames.items():
+        for metric in ("nll", "set_mae_med"):
+            d = ft[ft.select_by == MATCH[metric]].groupby(["dataset", "n_train", "method"])[metric].mean().unstack()
+            for b in ("soft_coral", "ce_soft"):
+                if b not in d or PROPOSED not in d:
+                    continue
+                for (ds, n), r in d.iterrows():
+                    rows.append(dict(variant=tag, metric=metric, baseline=LABEL[b], dataset=ds, n_train=n,
+                                     diff=r[PROPOSED] - r[b], seeds=ft.seed.nunique()))
+    if not rows:
+        return
+    t = pd.DataFrame(rows)
+    t.to_csv(TABLES / "finetune_variants.csv", index=False)
+    piv = t.pivot_table(index=["metric", "baseline", "variant", "n_train"], columns="dataset", values="diff")
+    piv["mean"] = piv.mean(axis=1)
+    piv["datasets_better"] = (piv.drop(columns="mean") < 0).sum(axis=1)
+    lines += ["## Fine-tuning variants: soft-CORN minus baseline (< 0 favours soft-CORN)\n",
+              "One row per fine-tuning folder and training size; the mean is over the datasets present.\n",
+              md_table(piv), ""]
+
+
+def setpred_section(df, lines, body, keys, tag, ref_size=None):
+    """Set-valued predictions and calibration (metrics added in ordbench/metrics.py): narrowest
+    contiguous interval holding at least 50 / 80 / 90 % of the predicted mass, scored against the
+    held-out raters (coverage, interval score) and the observed set (Jaccard distance), plus the
+    ordinal ECE. All read at the NLL-selected checkpoint. `keys` are the problem columns."""
+    d = df[(df.body == body) & (df.select_by == "nll")]
+    if "int80_iscore" not in d or d["int80_iscore"].isna().all():
+        return
+    if ref_size is not None:
+        d = d[d.n_train == ref_size] if ref_size != "full" else d[d.n_train == d.pool]
+    if d.empty:
+        return
+    cols = ["ho_ece", "int50_hocov", "int80_hocov", "int90_hocov", "int80_width", "int80_jdist", "int80_iscore"]
+    per = d.groupby(keys[:1] + ["method"])[cols].mean()
+    tab = per.groupby("method").mean().loc[[m for m in LABEL if m in set(d.method)]]
+    tab.index = tab.index.map(LABEL)
+    tab.to_csv(TABLES / f"setpred_{tag}_{body}.csv")
+    lines += [f"### Set-valued predictions and calibration, {tag}, {body} head "
+              f"({'full pool' if ref_size == 'full' else f'n = {ref_size}' if ref_size else 'all sizes'}; "
+              "mean over problems of seed means; hocov: share of held-out ratings inside the interval, "
+              "nominal 0.5 / 0.8 / 0.9; iscore and jdist: lower is better)\n", md_table(tab, ".3f"), ""]
+    for metric in ("ho_ece", "int80_iscore", "int80_jdist"):
+        pw = pairwise(df[df.body == body], keys, metric, "nll", [m for m in LABEL if m != PROPOSED])
+        if pw.empty:
+            continue
+        pw["baseline"] = pw.baseline.map(LABEL)
+        lines += [f"#### {tag}, {body}: soft-CORN vs baselines on {metric} (diff < 0 favours soft-CORN)\n",
+                  pw.to_markdown(index=False, floatfmt=".3f"), ""]
+
+
+def coverage_width_figure(df, panel_key, panels, body, path, titles, ref_size=None):
+    """Held-out coverage against interval width at nominal levels 0.5 / 0.8 / 0.9, one curve per method:
+    up and to the left is better (sharper at equal coverage)."""
+    d = df[(df.body == body) & (df.select_by == "nll")]
+    if "int80_hocov" not in d or d["int80_hocov"].isna().all():
+        return
+    if ref_size == "full":
+        d = d[d.n_train == d.pool]
+    elif ref_size is not None:
+        d = d[d.n_train == ref_size]
+    if d.empty:
+        return
+    fig, axes = plt.subplots(1, len(panels), figsize=(2.6 * len(panels), 2.8), squeeze=False)
+    for ax, pnl in zip(axes[0], panels):
+        g = d[d[panel_key] == pnl]
+        for m in SERIES:
+            t = g[g.method == m]
+            if t.empty:
+                continue
+            w = [t[f"int{q}_width"].mean() for q in (50, 80, 90)]
+            c = [t[f"int{q}_hocov"].mean() for q in (50, 80, 90)]
+            ax.plot(w, c, color=COLOR_OF[m], lw=2.2 if m == PROPOSED else 1.4, marker="o", ms=3.5,
+                    label=LABEL[m], zorder=3 if m == PROPOSED else 2)
+        for q in (0.5, 0.8, 0.9):
+            ax.axhline(q, color=INK2, lw=0.5, ls=":")
+        ax.set_title(titles.get(pnl, pnl), fontsize=9, color=INK)
+        ax.set_xlabel("mean interval width (levels)", fontsize=8, color=INK2)
+        style(ax)
+    axes[0][0].set_ylabel("held-out rater coverage", fontsize=8, color=INK2)
+    h, lab = axes[0][0].get_legend_handles_labels()
+    fig.legend(h, lab, loc="lower center", ncol=len(lab), fontsize=8, frameon=False, bbox_to_anchor=(0.5, -0.08))
+    fig.tight_layout()
+    fig.savefig(path, dpi=200, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -441,8 +582,18 @@ def main():
             lines += ["### soft-CORN minus baseline by set type (full pool, mean over datasets; < 0 favours soft-CORN)\n",
                       md_table(piv), ""]
         m_ablation(df, lines)
-        finetune_section(df, lines)
+        frames = {}
+        for ft_dir in sorted(RUNS.glob("finetune*")):
+            if ft_dir.is_dir():
+                ft = finetune_section(df, lines, ft_dir, ft_dir.name)
+                if ft is not None:
+                    frames[ft_dir.name] = ft
+        finetune_variants(frames, lines)
         datasets = [d for d in DATASET_TITLE if d in set(df.dataset)]
+        for body in ("linear", "mlp"):
+            setpred_section(df, lines, body, ["dataset", "n_train"], "real", ref_size="full")
+            coverage_width_figure(df, "dataset", datasets, body, FIGURES / f"setpred_coverage_width_real_{body}.png",
+                                  DATASET_TITLE, ref_size="full")
         for body in ("linear", "mlp"):
             curves(df, "dataset", datasets, "n_train", "nll", "nll", body,
                    FIGURES / f"real_nll_vs_softcoral_{body}.png", "test NLL − soft-CORAL", ref="soft_coral",
@@ -472,6 +623,10 @@ def main():
             curves(sy, "family", [f for f in FAMILY_TITLE if f in set(sy.family)], "n_train", "kl_pi", "nll", body,
                    FIGURES / f"synthetic_klpi_{body}.png", "KL(raters ‖ prediction)", logy=True, titles=FAMILY_TITLE)
         sy["n_test"] = 0   # independent data per seed: plain paired t-test (no overlap correction)
+        for body in ("linear", "mlp"):
+            setpred_section(sy, lines, body, ["family", "n_train"], "synthetic", ref_size=16384)
+            coverage_width_figure(sy, "family", [f for f in FAMILY_TITLE if f in set(sy.family)], body,
+                                  FIGURES / f"setpred_coverage_width_synthetic_{body}.png", FAMILY_TITLE, ref_size=16384)
         for body in ("linear", "mlp"):
             db = sy[sy.body == body]
             if db.seed.nunique() < 2:

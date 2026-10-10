@@ -79,3 +79,51 @@ def test_prior_bias_init_reproduces_marginal(method):
     init_bias_to_prior(head, method, pbar)
     pmf = log_pmf(HEAD_OF[method], head(torch.zeros(3, 4)).detach()).exp()
     assert torch.allclose(pmf, pbar.expand_as(pmf), atol=1e-4)
+
+
+@pytest.mark.parametrize("shape", [(3, 6), (1, 6)])        # dense head, and CORAL's single shared weight vector
+def test_fold_standardisation_is_exact(shape):
+    from ordbench.finetune import _fold_standardisation
+    g = torch.Generator().manual_seed(0)
+    W, b = torch.randn(*shape, generator=g, dtype=torch.float64), torch.randn(3, generator=g, dtype=torch.float64)
+    x = torch.randn(20, 6, generator=g, dtype=torch.float64) * 3 + 2
+    mu, sd = x.mean(0), x.std(0)
+    W2, b2 = _fold_standardisation(W, b, mu, sd)
+    assert torch.allclose(x @ W2.T + b2, ((x - mu) / sd) @ W.T + b)
+
+
+@pytest.mark.parametrize("method", ["soft_corn", "soft_coral", "ce_soft"])
+def test_linear_probe_init_fits_features_and_keeps_head_usable(method):
+    """The LP stage of LP-FT must leave `head` predicting from raw (unstandardised) features at least as
+    well as the training-label marginal, whichever parameterisation is probed."""
+    from ordbench.finetune import init_bias_to_prior, linear_probe_init
+    from ordbench.losses import HEAD_OF, log_pmf, output_dim
+    from ordbench.metrics import evaluate
+    from ordbench.train import make_evalset, target_from_mask
+
+    class Toy:                                     # stands in for a backbone: features are the inputs
+        def __init__(self, X):
+            self.X, self.lengths = X, np.ones(len(X), int)
+
+        def batch(self, idx, device):
+            return (self.X[idx],)
+
+    g = np.random.default_rng(0)
+    N, d, K = 600, 5, 4
+    X = torch.as_tensor(g.normal(size=(N, d)) * 5 + 3, dtype=torch.float32)
+    mask = np.zeros((N, K), bool)
+    mask[np.arange(N), np.clip((X[:, 0].numpy() / 5 + 0.6 + 0.3 * g.normal(size=N)) * 2 + 1, 0, K - 1).astype(int)] = True
+    Ttr = target_from_mask(mask)
+    tr, va = np.arange(400), np.arange(400, 600)
+    val = make_evalset(np.zeros((len(va), 1)), mask[va])
+    val["idx"] = va
+    head = EnsembleHead(1, d, output_dim(method, K), body="linear",
+                        output="coral" if HEAD_OF[method] == "coral" else "full")
+    init_bias_to_prior(head, method, Ttr.p[tr].mean(0))
+    enc = torch.nn.Identity()
+    data = Toy(X)
+    prior_nll = float(evaluate(log_pmf(HEAD_OF[method], head(X[va]).detach()), val)["nll"])
+    wd = linear_probe_init(head, method, enc, data, tr, Ttr, val, "cpu", steps=300)
+    nll = float(evaluate(log_pmf(HEAD_OF[method], head(X[va]).detach()), val)["nll"])
+    assert wd in (0.01, 0.1, 1.0, 10.0)
+    assert nll < prior_nll - 0.05, (prior_nll, nll)

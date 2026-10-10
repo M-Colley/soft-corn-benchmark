@@ -2,13 +2,15 @@
 
 For each (dataset, training size, method) the backbone is fine-tuned with every learning rate on
 seed 0; the learning rate with the best validation NLL is then used for the other seeds (run seed 0
-first, or a seed without a seed-0 file falls back to trying every learning rate). Validation and
-test metrics are logged after every epoch. The file stores the learning rates as the
-configuration axis, so ordbench.analysis.select picks the learning rate and epoch on validation
-data exactly as for the frozen-feature runs. Splits, set labels (m = 3) and held-out raters are
-those of scripts/03_run.py.
+first, or a seed without a seed-0 file falls back to trying every learning rate; `--lr_per_seed`
+tries every learning rate on every seed instead). Validation and test metrics are logged after
+every epoch. The file stores the learning rates as the configuration axis, so
+ordbench.analysis.select picks the learning rate and epoch on validation data exactly as for the
+frozen-feature runs. Splits, set labels (m = 3) and held-out raters are those of scripts/03_run.py.
 
     python scripts/06_finetune.py --datasets cb mhs --seeds 0 1 2
+    python scripts/06_finetune.py --init lpft --out $SCB_DATA/results/finetune_lpft      # LP-FT variant
+    python scripts/06_finetune.py --text_model microsoft/deberta-v3-base --out $SCB_DATA/results/finetune_deberta
 Output: $SCB_DATA/results/finetune/<dataset>_m3_s<seed>_n<n>_finetune__<method>.npz (finished files are skipped)
 """
 import argparse
@@ -44,6 +46,10 @@ def main():
                     help="training items; 2048 matches a frozen-feature cell (CommitmentBank uses its 840)")
     ap.add_argument("--epochs", type=int, default=None)
     ap.add_argument("--head_lr", type=float, default=1e-3)
+    ap.add_argument("--init", choices=("prior", "lpft"), default="prior",
+                    help="head initialisation: training-label marginal, or linear probe on frozen features then fine-tune")
+    ap.add_argument("--text_model", default=FT.TEXT_MODEL, help="Hugging Face encoder for the text datasets")
+    ap.add_argument("--lr_per_seed", action="store_true", help="select the learning rate on every seed, not only seed 0")
     ap.add_argument("--out", default=str(RUNS / "finetune"))
     a = ap.parse_args()
     out = Path(a.out)
@@ -67,7 +73,7 @@ def main():
                 continue
             if data is None:
                 t0 = time.time()
-                data = FT.make_data(name, inputs)
+                data = FT.make_data(name, inputs, a.text_model)
                 print(f"[{name}] inputs ready in {time.time() - t0:.0f}s", flush=True)
             evalsets = {"val": make_evalset(np.zeros((len(va), 1)), mask[va], device=dev),
                         "test": make_evalset(np.zeros((len(te), 1)), mask[te], ho=ho[te], device=dev)}
@@ -80,7 +86,7 @@ def main():
                 # learning rate chosen once per (dataset, size, method) on seed 0's validation NLL and
                 # reused for every other seed, also when those seeds run in a later call
                 f0 = out / f"{name}_m{m}_s0_n{len(tr)}_finetune__{method}.npz"
-                if seed != 0 and f0.exists():
+                if seed != 0 and f0.exists() and not a.lr_per_seed:
                     z0 = np.load(f0, allow_pickle=False)
                     j = int(np.nanargmin(np.nanmin(z0[f"{method}/val/nll"], axis=0)))
                     lrs = [json.loads(str(z0["meta"]))["configs"][j][0]]
@@ -89,7 +95,7 @@ def main():
                     t0 = time.time()
                     print(f"{f.stem}  lr={lr:g}", flush=True)
                     res[lr] = FT.train_run(name, method, K, data, tr, evalsets, lr, epochs, seed, head_lr=a.head_lr, device=dev,
-                                           log=lambda s: print(s, flush=True))
+                                           log=lambda s: print(s, flush=True), init=a.init, text_model=a.text_model)
                     print(f"    done in {time.time() - t0:.0f}s", flush=True)
                 arrays = {}
                 for split in ("val", "test"):
@@ -97,7 +103,8 @@ def main():
                         arrays[f"{method}/{split}/{k}"] = np.stack([res[lr][split][k] for lr in lrs], 1)
                 meta = dict(dataset=name, m=m, seed=seed, n_train=len(tr), pool=len(pool), body="finetune",
                             K=K, n_val=len(va), n_test=len(te), configs=[(lr, 0.01) for lr in lrs],
-                            methods=[method], prior=prior, epochs=epochs, head_lr=a.head_lr)
+                            methods=[method], prior=prior, epochs=epochs, head_lr=a.head_lr, init=a.init,
+                            backbone=("open_clip " + "/".join(FT.IMAGE_MODEL)) if name == "scut" else a.text_model)
                 np.savez_compressed(f, steps=np.arange(1, epochs + 1), meta=json.dumps(meta), **arrays)
 
 

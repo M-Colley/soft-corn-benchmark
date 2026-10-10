@@ -1,9 +1,13 @@
 """End-to-end fine-tuning of the encoders used for the frozen features.
 
-Text: sentence-transformers/all-mpnet-base-v2 (Hugging Face transformers, mean pooling).
-Images: the OpenCLIP ViT-B/16 (LAION-2B) image tower. Each loss trains its own copy of the
-backbone, so the loss can shape the representation. The output heads, losses and metrics are the
-ones used for the frozen-feature benchmark.
+Text: sentence-transformers/all-mpnet-base-v2 (Hugging Face transformers, mean pooling); any other
+Hugging Face encoder can be named with `text_model`. Images: the OpenCLIP ViT-B/16 (LAION-2B) image
+tower. Each loss trains its own copy of the backbone, so the loss can shape the representation. The
+output heads, losses and metrics are the ones used for the frozen-feature benchmark.
+
+Head initialisation (`init`): "prior" starts every head at the training-label marginal (default);
+"lpft" first fits the head on the frozen pretrained features and then fine-tunes everything
+(linear probing, then fine-tuning; Kumar et al., ICLR 2022).
 
 Items are rebuilt from the raw releases in the exact order of the processed feature files
 (their `item_id`), so splits and set labels are identical to the main benchmark.
@@ -55,9 +59,9 @@ def load_inputs(name, item_id):
 
 
 class TextData:
-    def __init__(self, inputs, max_len):
+    def __init__(self, inputs, max_len, model=TEXT_MODEL):
         from transformers import AutoTokenizer
-        self.tok = AutoTokenizer.from_pretrained(TEXT_MODEL)
+        self.tok = AutoTokenizer.from_pretrained(model)
         pairs = isinstance(inputs[0], tuple)
         a = [x[0] for x in inputs] if pairs else list(inputs)
         b = [x[1] for x in inputs] if pairs else None
@@ -103,10 +107,10 @@ class ImageData:
 # --------------------------------------------------------------------------------------------
 
 class TextEncoder(nn.Module):
-    def __init__(self):
+    def __init__(self, model=TEXT_MODEL):
         super().__init__()
         from transformers import AutoModel
-        self.m = AutoModel.from_pretrained(TEXT_MODEL)
+        self.m = AutoModel.from_pretrained(model)
         self.dim = self.m.config.hidden_size
 
     def forward(self, ids, mask):
@@ -127,12 +131,12 @@ class ImageEncoder(nn.Module):
         return self.v(x)
 
 
-def make(name):
-    return ImageEncoder() if name == "scut" else TextEncoder()
+def make(name, text_model=TEXT_MODEL):
+    return ImageEncoder() if name == "scut" else TextEncoder(text_model)
 
 
-def make_data(name, inputs):
-    return ImageData(inputs) if name == "scut" else TextData(inputs, MAX_LEN.get(name, 128))
+def make_data(name, inputs, text_model=TEXT_MODEL):
+    return ImageData(inputs) if name == "scut" else TextData(inputs, MAX_LEN.get(name, 128), text_model)
 
 
 # --------------------------------------------------------------------------------------------
@@ -189,35 +193,81 @@ def _param_groups(modules, wd):
 
 
 @torch.no_grad()
-def predict(enc, head, method, data, idx, device, batch=128):
+def encode(enc, data, idx, device, batch=128):
+    """Backbone features of the items `idx`, in the order of `idx` (length-sorted batches)."""
     enc.eval()
-    head.eval()
-    order = np.argsort(-data.lengths[idx], kind="stable")      # length-sorted batches, original order restored
+    order = np.argsort(-data.lengths[idx], kind="stable")
     outs = []
     for s in range(0, len(idx), batch):
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            z = enc(*data.batch(idx[order[s:s + batch]], device))
-        outs.append(head(z.float()))
+            outs.append(enc(*data.batch(idx[order[s:s + batch]], device)).float())
     enc.train()
+    z = torch.cat(outs)
+    out = torch.empty_like(z)
+    out[torch.as_tensor(order, device=z.device)] = z
+    return out
+
+
+@torch.no_grad()
+def predict(enc, head, method, data, idx, device, batch=128):
+    head.eval()
+    out = head(encode(enc, data, idx, device, batch))
     head.train()
-    out = torch.empty_like(torch.cat(outs, 1))
-    out[:, torch.as_tensor(order, device=out.device)] = torch.cat(outs, 1)
     return log_pmf(HEAD_OF[method], out)
 
 
+@torch.no_grad()
+def _fold_standardisation(W, b, mu, sd):
+    """Weights and bias of x -> W x + b acting on raw features, equal to (W, b) acting on (x - mu) / sd."""
+    W = W / sd
+    return W, b - W @ mu
+
+
+def linear_probe_init(head, method, enc, data, tr, Ttr, val, device, wds=(0.01, 0.1, 1.0, 10.0), lr=1e-2,
+                      steps=500, batch=256, seed=0):
+    """Fit `head` on the frozen features of the pretrained encoder (the first stage of LP-FT).
+    A small ensemble of coupled-L2 strengths `wds` is trained exactly like the frozen-feature benchmark
+    (standardised features, Adam, biases at the training-label marginal) and the member with the best
+    validation NLL is copied into `head`, with the standardisation folded into its weights."""
+    from .heads import MemberAdam
+    from .train import batch_schedule
+    Z, Zv = encode(enc, data, tr, device), encode(enc, data, val["idx"], device)
+    mu, sd = Z.mean(0), Z.std(0) + 1e-6
+    Z, Zv = (Z - mu) / sd, (Zv - mu) / sd
+    M = len(wds)
+    probe = EnsembleHead(M, Z.shape[1], head.b.shape[-1], body="linear", output=head.output, seed=seed).to(device)
+    init_bias_to_prior(probe, method, Ttr.p[torch.as_tensor(tr)].mean(0))
+    opt = MemberAdam(list(probe.named_parameters()), [lr] * M, list(wds), probe.decay_mask())
+    T = Target(*(v[torch.as_tensor(tr)].to(device) for v in (Ttr.p, Ttr.mask, Ttr.y)))
+    for idx in batch_schedule(len(Z), batch, steps, seed).to(device):
+        opt.zero_grad()
+        compute_loss(method, probe(Z[idx]), T.index(idx)).sum().backward()
+        opt.step()
+    with torch.no_grad():
+        j = int(evaluate(log_pmf(HEAD_OF[method], probe(Zv)), val)["nll"].argmin())
+        W, b = _fold_standardisation(probe.W[j], probe.b[j], mu, sd)
+        head.W.copy_(W[None])
+        head.b.copy_(b[None])
+    return wds[j]
+
+
 def train_run(name, method, K, data, tr, evalsets, lr, epochs, seed, batch=32, wd=0.01, warmup=0.1,
-              head_lr=1e-3, device="cuda", log=print):
+              head_lr=1e-3, device="cuda", log=print, init="prior", text_model=TEXT_MODEL):
     """Fine-tune one backbone with one loss and backbone learning rate `lr`. The freshly initialised
     output head trains at `head_lr` (the same for every method): at backbone learning rates
     CORAL's threshold biases, and to a lesser degree CORN's, barely move from their initial values
     within a few hundred steps, which handicaps those heads. Returns {split: {metric: (epochs,)}}."""
     from transformers import get_linear_schedule_with_warmup
     torch.manual_seed(seed)
-    enc = make(name).to(device)
+    enc = make(name, text_model).to(device)
     Ttr = evalsets["_train_target"]
     head = EnsembleHead(1, enc.dim, output_dim(method, K), body="linear",
                         output="coral" if HEAD_OF[method] == "coral" else "full", seed=seed).to(device)
     init_bias_to_prior(head, method, Ttr.p[torch.as_tensor(tr)].mean(0))
+    if init == "lpft":
+        log(f"    linear probe: L2 {linear_probe_init(head, method, enc, data, tr, Ttr, evalsets['val'], device, seed=seed):g}")
+    elif init != "prior":
+        raise ValueError(init)
     groups = ([dict(g, lr=lr) for g in _param_groups([enc], wd)]
               + [dict(g, lr=head_lr) for g in _param_groups([head], wd)])
     opt = torch.optim.AdamW(groups, lr=lr, fused=True)
