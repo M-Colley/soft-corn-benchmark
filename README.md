@@ -41,7 +41,7 @@ machines exactly. To continue earlier work, also copy `results/` (about 0.4 GB o
 runners skip finished cells and `05_analyze.py` analyses everything present.
 
 Continuous integration (`.github/workflows/ci.yml`) runs ruff and the test suite on CPU, on Ubuntu
-(Python 3.11, 3.13) and Windows (Python 3.13), using `requirements-ci.txt`.
+(Python 3.11, 3.13, 3.14, 3.15) and Windows (Python 3.13, 3.14, 3.15), using `requirements-ci.txt`.
 
 ## Pipeline
 
