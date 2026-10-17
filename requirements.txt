@@ -27,7 +27,7 @@ pillow>=10
 
 # encoders (frozen features and fine-tuning)
 torchvision>=0.19
-transformers>=4.44
+transformers>=4.56          # `dtype=` (fp32 weights, see CLAUDE.md) needs 4.56
 sentence-transformers>=3.0
 open_clip_torch>=2.24
 tiktoken>=0.7             # tokenizer of DeBERTa-v3 under transformers 5

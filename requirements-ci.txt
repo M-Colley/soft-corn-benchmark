@@ -6,5 +6,6 @@ scipy>=1.11
 pandas>=2.2
 coral-pytorch>=1.4
 baycomp>=1.0.3       # Bayesian signed-rank test used by ordbench.analysis.pairwise_table
+transformers>=4.56   # runs the fp32-weights regression test of the text encoder (`dtype=` needs 4.56)
 pytest>=8
 ruff>=0.5
