@@ -51,13 +51,25 @@ python scripts/02_build.py           # frozen-encoder features + set-valued labe
 python scripts/03_run.py             # real-data benchmark (resumable; skips finished cells)
 python scripts/04_synthetic.py       # synthetic benchmark (resumable)
 python scripts/06_finetune.py        # fine-tuned backbones (resumable)
-python scripts/07_checks.py          # grid-edge checks and hyperparameter sensitivity -> results/checks.md
+python scripts/07_checks.py          # grid-edge checks, hyperparameter sensitivity, fine-tuning variants -> results/checks.md
 python scripts/05_analyze.py         # selection, tables, tests, figures -> results/, figures/
-python -m pytest -q                  # 35+ tests incl. a CPU end-to-end pipeline smoke test
+python -m pytest -q                  # 114 tests incl. a CPU end-to-end pipeline smoke test
+
+# extension studies (FUTURE_WORK.md)
+python scripts/08_replay.py          # predictions at the selected checkpoints of the real linear-head cells
+python scripts/09_setpred.py         # item-level bootstrap, conformal sets, reliability, temperature scaling -> results/setpred.md
+python scripts/10_extensions.py      # targets, baselines, synthetic variants, extra datasets, shift, personalisation -> results/extensions.md
+python scripts/11_cost.py            # compute cost per method -> results/cost.md
+python scripts/12_shift.py           # leave-one-group-out distribution shift
+python scripts/13_personal.py        # per-rater offsets on SCUT
+python scripts/01_download.py vader convabuse && python scripts/02_build.py vader_tweets vader_nyt vader_movie vader_amazon convabuse
+python scripts/01_download.py provoice && python scripts/02_build.py provoice provoice_task provoice_centred provoice_known   # in-vehicle study, 0.55 GB
+bash scripts/run_provoice.sh python  # its runs (driver-level splits, --m 0) and scripts/14_provoice.py -> results/provoice.md
+bash scripts/run_provoice.sh python kcurve kanalyze && bash scripts/run_kcontrol.sh python   # K-curve personalisation (~3 h) -> results/kcurve.md
 ```
 
-`scripts/run_frozen.sh` and `scripts/run_finetune.sh` run every stage of the frozen-feature and
-fine-tuning benchmarks one after another (resumable; stages are listed in the script headers).
+`scripts/run_frozen.sh`, `scripts/run_finetune.sh` and `scripts/run_extras.sh` run every stage of the frozen-feature,
+fine-tuning and extension experiments one after another (resumable; stages are listed in the script headers).
 Run them sequentially: two jobs on one GPU time-slice it and finish no sooner than one after the other.
 
 ## Design
@@ -73,6 +85,9 @@ held-out raters that never enter training or model selection.
 | Humicroedit funniness (Hossain et al., 2020) | 4 | 15,095 | mpnet(edited), mpnet(edited) − mpnet(original) |
 | CommitmentBank (de Marneffe et al., 2019) | 7 | 1,200 | mpnet(context+target), mpnet(prompt) |
 | SCUT-FBP5500 (Liang et al., 2018), 60 raters | 5 | 5,500 | OpenCLIP ViT-B/16 (LAION-2B) |
+| *extension:* VADER sentiment (Hutto & Gilbert, 2014), four corpora, ≥ 15 raters | 9 | 4,200 / 5,190 / 10,605 / 3,708 | all-mpnet-base-v2 |
+| *extension:* ConvAbuse (Cercas Curry et al., 2021), 2–7 annotators | 5 | 4,185 (3,091 with ≥ 3) | mpnet(user utterance), mpnet(exchange) |
+| *extension:* ProVoice study 1 (in-vehicle assistant; CC-BY-NC-4.0), 12 drivers, **native sets** (6.8% of answers) | 5 | 1,446 | 45 window summaries of driver state and vehicle, task code |
 
 **Synthetic** (`ordbench/synthetic.py`). Rater distributions π(x) from five families with logits
 linear in x: proportional odds (CORAL's model), continuation ratio (CORN's), multinomial
@@ -81,7 +96,14 @@ Sets come from m = 3 raters, as on real data. The population target of every sof
 t(x) = E[u_S | x], is computed exactly by enumerating all K^m rating tuples, so the
 excess risk KL(t ‖ p̂) can be measured without noise.
 
-**Methods** (`ordbench/losses.py`, 12 total). soft-CORN; soft-CORAL and soft-OR; soft CE;
+**Extension methods** (`TARGET_METHODS`, `BASELINE_METHODS`; run into their own result folders): training targets built
+from the ratings (empirical distribution, 50/50 mixture, exact set likelihood) for the CORN, softmax and CORAL
+parameterisations; SORD (Laplace, Gaussian), CDW-CE, binomial and Poisson heads, cumulative link models (logit, probit,
+cloglog, learned Aranda–Ordaz link). **Extension data:** synthetic variants (K, d, signal, nonlinear generators, noise,
+rater heterogeneity, interval / threshold / mirror set mechanisms), leave-one-group-out shift, SCUT personalisation,
+natively set-valued tables (`ordbench/native.py`).
+
+**Methods** (`ordbench/losses.py`, 12 core). soft-CORN; soft-CORAL and soft-OR; soft CE;
 OLDL-CAD / QFD / CJS (ported from github.com/downdric/OLDL and checked against it);
 PLL-softmax / PLL-CORN (−log P(y ∈ S)); hard CE / CORN / CORAL on the lower median of the set.
 CORN and CORAL use `coral-pytorch`.
@@ -122,20 +144,32 @@ over seeds. Across problems: Friedman + Nemenyi (autorank) and the Bayesian sign
 with a region of practical equivalence (baycomp).
 
 ## Status
-Complete:
-- linear heads: all real datasets (5 seeds × all sizes) and all synthetic families
-  (5 seeds × 4 sizes);
-- MLP heads: real n ∈ {512, full} and synthetic n ∈ {1,024, 16,384}, 5 seeds each;
-- robustness checks: extended L2 grid on CommitmentBank / Humicroedit (`results/wd_check`) and a
-  low-learning-rate MLP grid (`results/mlp_lr_check`), both on D:;
+Last full run: 2026-10-10 / 11 on a second machine (RTX 5080, data root `D:/soft-corn-benchmark-data`),
+everything re-run from the raw data. Complete:
+- linear heads: all real datasets (10 seeds × all sizes) and all synthetic families (10 seeds × 4 sizes);
+- MLP heads: real n ∈ {512, full} and synthetic n ∈ {1,024, 16,384}, 10 seeds each;
+- robustness checks, analysed by `scripts/07_checks.py` into `results/checks.md`: extended L2 grid on
+  CommitmentBank / Humicroedit (`results/wd_check`), a low-learning-rate MLP grid
+  (`results/mlp_lr_check`), hyperparameter sensitivity, and the fine-tuning learning-rate and
+  head-initialisation checks;
 - annotators-per-set ablation, m ∈ {2, 5}, linear heads, n ∈ {512, 2048, full}, 5 seeds
-  (`results/m_ablation` on D:; m = 5 excludes MHS, which has too few items with five ratings).
-  It is analysed together with the matching m = 3 runs in `05_analyze.py`;
-- fine-tuned backbones for soft-CORN, soft-CORAL and soft CE (5 datasets, n = 2048, 3 seeds;
-  `results/finetune` on D:).
+  (`results/m_ablation`; m = 5 excludes MHS, which has too few items with five ratings);
+- fine-tuned backbones (5 datasets, 5 seeds): soft-CORN, soft-CORAL and soft CE at n = 2,048
+  (CommitmentBank 840) and n = 512, main protocol (`results/finetune`) and LP-FT (`results/finetune_lpft`); reference
+  methods at n = 2,048; backbone learning rate 1e-4 as a check (`results/finetune_lr_check`);
+- extension studies (REPORT.md sections 4.1 and 5.1–5.7): richer synthetic variants (`results/synth_*`), training
+  targets (`targets_*`), further baselines (`baselines_*`), VADER and ConvAbuse (`real_extra`), distribution shift
+  (`shift`), personalisation (`personal`), replay and conformal sets (`replay`), compute cost.
 
-Background tool jobs are killed after 2 h, so long runs were split by `--seeds`. The runners skip
-finished cells. `03_run.py` accepts `--lrs` / `--wds` to override the grid.
+Also complete: fine-tuning with a tuned LP-FT probe, and with DeBERTa-v3-base, RoBERTa-large, DINOv2 and SigLIP (3 seeds,
+`scripts/run_finetune.sh`); the in-vehicle study with natively set-valued labels (`results/provoice*`, REPORT.md section 5.8:
+four feature variants, 20 driver-level or window-level splits) and its K-curve (REPORT.md section 5.9: K = 0 ... 40 calibration
+answers of a held-out driver, 12 drivers, 3 seeds, plus a control that removes the set information). Open: fine-tuning seeds 5–9
+for the LP-FT variants; fine-tuning at 8,192 items and the full pools; the thesis's L2-SP and ANIL arms; the rest of `FUTURE_WORK.md`.
+
+Background tool jobs may be killed after 2 h, so long runs were split by stage and `--seeds`. The
+runners skip finished cells. `03_run.py` accepts `--lrs` / `--wds` to override the grid. Run GPU
+stages one at a time (`scripts/run_frozen.sh`, `scripts/run_finetune.sh`, `scripts/run_extras.sh`).
 
 ## Decisions taken along the way
 - The C: drive was full, so all data moved to D:.
