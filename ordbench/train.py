@@ -15,7 +15,7 @@ import numpy as np
 import torch
 
 from .heads import EnsembleHead, MemberAdam
-from .losses import HEAD_OF, Target, compute_loss, log_pmf, output_dim, rank_violation
+from .losses import HEAD_OF, OUTPUT_OF, Target, compute_loss, log_pmf, output_dim, rank_violation
 from .metrics import evaluate, prepare
 
 LRS = (3e-4, 1e-3, 3e-3, 1e-2, 3e-2)
@@ -23,14 +23,16 @@ WDS = (1e-3, 1e-2, 1e-1, 1.0, 10.0)     # L2 penalty (coupled weight decay)
 CONFIGS = list(itertools.product(LRS, WDS))
 
 
-def target_from_mask(mask):
-    """Uniform-over-set soft label, and the lower median of the set as the hard label."""
+def target_from_mask(mask, counts=None, m=0):
+    """Uniform-over-set soft label, and the lower median of the set as the hard label. `counts` (N, K) are
+    the counts of the m ratings the sets were built from, for the empirical and exact-likelihood targets."""
     mask = torch.as_tensor(mask).bool()
     p = mask.float() / mask.sum(-1, keepdim=True)
     size = mask.sum(-1)
     order = torch.cumsum(mask.long(), -1)                   # rank of each accepted level
     y = ((order == ((size - 1) // 2 + 1)[:, None]) & mask).float().argmax(-1)
-    return Target(p, mask, y)
+    c = None if counts is None else torch.as_tensor(counts, dtype=torch.float32)
+    return Target(p, mask, y, c, m)
 
 
 def batch_schedule(n, batch, steps, seed):
@@ -45,13 +47,16 @@ def batch_schedule(n, batch, steps, seed):
     return torch.stack(out[:steps])
 
 
-def make_evalset(X, mask, p=None, ho=None, device="cpu"):
-    """p defaults to the uniform-over-set label; pass the population target in synthetic runs."""
+def make_evalset(X, mask, p=None, ho=None, device="cpu", m=0, aux=None):
+    """p defaults to the uniform-over-set label; pass the population target in synthetic runs. With m > 0
+    (raters per set) the exact log-likelihood of the observed sets, `xnll`, is also logged."""
     t = target_from_mask(mask)
     p = t.p if p is None else torch.as_tensor(p, dtype=torch.float32)
     ho = None if ho is None else torch.as_tensor(ho, dtype=torch.float32, device=device)
-    ev = prepare(p.to(device), t.mask.to(device), ho)
+    ev = prepare(p.to(device), t.mask.to(device), ho, m=m)
     ev["X"] = torch.as_tensor(X, dtype=torch.float32, device=device)
+    if aux is not None:
+        ev["aux"] = torch.as_tensor(aux, dtype=torch.long, device=device)
     return ev
 
 
@@ -66,11 +71,18 @@ def prior_metrics(mask_tr, evalsets):
 
 
 def run_cell(X_tr, mask_tr, evalsets, K, methods, body="linear", seed=0, steps=2000,
-             eval_every=50, batch=256, configs=CONFIGS, device="cuda", use_graph=True):
-    """Returns {method: {split: {metric: array (n_evals, M)}}} and the evaluated step numbers."""
+             eval_every=50, batch=256, configs=CONFIGS, device="cuda", use_graph=True,
+             counts_tr=None, m=0, capture=None, aux_tr=None, n_aux=0, target_tr=None):
+    """Returns {method: {split: {metric: array (n_evals, M)}}} and the evaluated step numbers.
+
+    counts_tr, m: counts of the m ratings behind each training set (targets built from the ratings).
+    capture: optional dict {method: [(member, step), ...]}; the log-PMFs of every evaluation set at those
+        members and steps are stored in place in capture[("pmf", method, split, member, step)].
+    aux_tr, n_aux: annotator index of every training row and the size of the offset table (personalised heads;
+        evaluation sets carry their own `aux`). target_tr: a ready-made Target (for example one rating per row)."""
     Xtr = torch.as_tensor(X_tr, dtype=torch.float32, device=device)
-    Ttr = target_from_mask(mask_tr)
-    Ttr = Target(Ttr.p.to(device), Ttr.mask.to(device), Ttr.y.to(device))
+    Ttr = (target_tr if target_tr is not None else target_from_mask(mask_tr, counts_tr, m)).to(device)
+    Atr = None if aux_tr is None else torch.as_tensor(aux_tr, dtype=torch.long, device=device)
     sched = batch_schedule(len(Xtr), batch, steps, seed).to(device)
     lrs = [c[0] for c in configs]
     wds = [c[1] for c in configs]
@@ -80,13 +92,12 @@ def run_cell(X_tr, mask_tr, evalsets, K, methods, body="linear", seed=0, steps=2
     for method in methods:
         torch.manual_seed(seed)            # dropout masks
         head = EnsembleHead(M, Xtr.shape[1], output_dim(method, K), body=body,
-                            output="coral" if HEAD_OF[method] == "coral" else "full",
-                            seed=seed).to(device)
+                            output=OUTPUT_OF[HEAD_OF[method]], seed=seed, n_aux=n_aux).to(device)
         opt = MemberAdam(list(head.named_parameters()), lrs, wds, head.decay_mask())
         idx = sched[0].clone()
 
         def train_step():
-            loss = compute_loss(method, head(Xtr[idx]), Ttr.index(idx))
+            loss = compute_loss(method, head(Xtr[idx], None if Atr is None else Atr[idx]), Ttr.index(idx))
             loss.sum().backward()
             opt.step()
             return loss
@@ -106,8 +117,11 @@ def run_cell(X_tr, mask_tr, evalsets, K, methods, body="linear", seed=0, steps=2
                 with torch.no_grad():
                     log["train"]["loss"].append(loss.detach().cpu().numpy())
                     for name, ev in evalsets.items():
-                        out = head(ev["X"])
-                        lp = log_pmf(HEAD_OF[method], out)
+                        out = head(ev["X"], ev.get("aux"))
+                        lp = log_pmf(HEAD_OF[method], out, K)
+                        for member, at in (capture or {}).get(method, ()):
+                            if at == step:
+                                capture[("pmf", method, name, member, step)] = lp[member].detach().cpu().numpy()
                         met = evaluate(lp, ev)
                         met["rank_viol"] = rank_violation(HEAD_OF[method], out).mean(-1)
                         vals = torch.stack([v.float() for v in met.values()]).cpu().numpy()

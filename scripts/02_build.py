@@ -11,11 +11,15 @@ Output: $SCB_DATA/processed/<name>.npz with
     valid_m{m} (n,) items with at least m ratings.
 
     python scripts/02_build.py [names...]
+    python scripts/02_build.py vader_tweets vader_nyt vader_movie vader_amazon convabuse   # extra datasets (item 6)
+    python scripts/02_build.py provoice provoice_task provoice_centred provoice_known   # natively set-valued in-vehicle study (no GPU; use --m 0)
 """
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from ordbench import extra_data  # noqa: E402
+from ordbench.provoice import build_provoice, build_provoice_centred, build_provoice_known, build_provoice_task  # noqa: E402
 from ordbench.paths import PROCESSED, RAW  # noqa: E402
 
 import numpy as np  # noqa: E402
@@ -150,9 +154,27 @@ def build_scut():
     save("scut", embed_images(paths), ratings.tolist(), 5, {"item_id": ratings.index.to_numpy()})
 
 
+def build_vader(name):
+    # Hutto & Gilbert (2014): sentiment intensity -4..+4 (K = 9), >= 15 raters per item. Features: all-mpnet-base-v2.
+    ids, texts, ratings = extra_data.vader_items(name)
+    save(name, embed_text(texts), ratings, extra_data.VADER_K, {"item_id": ids})
+
+
+def build_convabuse():
+    # Cercas Curry et al. (2021): five ordered abuse-severity levels, 2-7 annotators per exchange. Features: mpnet of the
+    # user utterance and of the whole exchange (previous turn, agent reply, user utterance).
+    ids, texts, ratings = extra_data.convabuse_items()
+    X = np.concatenate([embed_text([t[0] for t in texts]), embed_text([t[1] for t in texts])], 1)
+    save("convabuse", X, ratings, extra_data.CONVABUSE_K, {"item_id": ids})
+
+
 BUILDERS = {"mhs": build_mhs, "wikitox": build_wikitox, "humicroedit": build_humicroedit,
-            "cb": build_cb, "scut": build_scut}
+            "cb": build_cb, "scut": build_scut,
+            **{n: (lambda n=n: build_vader(n)) for n in extra_data.VADER}, "convabuse": build_convabuse,
+            "provoice": build_provoice, "provoice_task": build_provoice_task,
+            "provoice_centred": build_provoice_centred, "provoice_known": build_provoice_known}
+CORE = ["mhs", "wikitox", "humicroedit", "cb", "scut"]
 
 if __name__ == "__main__":
-    for n in sys.argv[1:] or list(BUILDERS):
+    for n in sys.argv[1:] or CORE:
         BUILDERS[n]()

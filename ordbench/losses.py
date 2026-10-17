@@ -1,23 +1,36 @@
 """Losses compared in the benchmark.
 
-Every loss acts on the raw outputs of one of four output parameterisations and on a batch
-`Target` that carries the set-valued label in three equivalent views:
+Every loss acts on the raw outputs of one of several output parameterisations and on a batch
+`Target` that carries the set-valued label in equivalent views:
 
     p     (N, K)  uniform distribution over the accepted set (the soft label)
     mask  (N, K)  boolean indicator of the accepted set
     y     (N,)    hard label obtained by collapsing the set to its lower median
+    c     (N, K)  optional: counts of the m ratings the set was built from (empirical-distribution and
+                  exact-likelihood targets); m is the number of raters per set (0 if unknown)
 
 Parameterisations (`HEAD_OF[name]`):
     softmax  K logits, PMF = softmax
     corn     K-1 conditional logits, P(y>k | y>k-1) = sigmoid(z_k)            (Shi et al., 2023)
     coral    K-1 logits s(x) + b_k with one shared weight vector              (Cao et al., 2020)
     or       K-1 independent logits for P(y>k), no rank constraint            (Niu et al., 2016)
+    binom    one score, PMF = Binomial(K-1, sigmoid(s))                       (unimodal; Beckham & Pal, 2017)
+    poisson  one score, PMF = truncated Poisson(exp(s))                       (unimodal; Beckham & Pal, 2017)
+    clm_*    cumulative link model, P(y>k) = F(s(x) + b_k) with ordered thresholds b_k and link F in
+             {logit, probit, cloglog}; clm_ao learns the link (Aranda-Ordaz family, one extra parameter)
 
 Hard-label CORAL and soft-CORAL / soft-OR call `coral_pytorch.coral_loss`; hard-label CORN uses
 an identity with soft-CORN that tests/test_losses.py checks against `coral_pytorch.corn_loss`. The OLDL
 objectives port the reference implementation of Wen et al. (ICCV 2023, github.com/downdric/OLDL,
 MIT) from its hard-coded K in {5, 10, 85} to arbitrary K.
+
+`METHODS` is the benchmark's core set of twelve; `TARGET_METHODS` and `BASELINE_METHODS` are the
+extensions that vary the training target (empirical ratings, exact set likelihood, mixtures) and add
+further baselines (SORD, CDW-CE, unimodal heads, cumulative link models). They are run into their own
+result folders so the core benchmark keeps its twelve methods.
 """
+import itertools
+import math
 from dataclasses import dataclass
 
 import torch
@@ -29,12 +42,25 @@ EPS = 1e-7
 
 @dataclass
 class Target:
-    p: torch.Tensor      # (N, K) float
-    mask: torch.Tensor   # (N, K) bool
-    y: torch.Tensor      # (N,) long
+    p: torch.Tensor                 # (N, K) float
+    mask: torch.Tensor              # (N, K) bool
+    y: torch.Tensor                 # (N,) long
+    c: torch.Tensor | None = None   # (N, K) float counts of the m ratings behind each set
+    m: int = 0                      # raters per set (0: unknown)
 
     def index(self, idx):
-        return Target(self.p[idx], self.mask[idx], self.y[idx])
+        return Target(self.p[idx], self.mask[idx], self.y[idx], None if self.c is None else self.c[idx], self.m)
+
+    def to(self, device):
+        return Target(self.p.to(device), self.mask.to(device), self.y.to(device),
+                      None if self.c is None else self.c.to(device), self.m)
+
+    @property
+    def empirical(self):
+        """Empirical distribution of the m ratings behind each set."""
+        if self.c is None:
+            raise ValueError("this loss needs the ratings behind each set (Target.c)")
+        return self.c / self.c.sum(-1, keepdim=True)
 
 
 # --------------------------------------------------------------------------------------------
@@ -65,13 +91,50 @@ def cumulative_to_pmf(gt):
     return pmf / pmf.sum(-1, keepdim=True)
 
 
-def log_pmf(head, out):
+def binom_log_pmf(s, K):
+    """Binomial(K-1, q) over levels 0..K-1 with q = sigmoid(s); s (..., 1)."""
+    k = torch.arange(K, device=s.device, dtype=s.dtype)
+    log_coef = math.lgamma(K) - torch.lgamma(k + 1) - torch.lgamma(K - k)        # log C(K-1, k)
+    return log_coef + k * F.logsigmoid(s) + (K - 1 - k) * F.logsigmoid(-s)
+
+
+def poisson_log_pmf(s, K):
+    """Poisson(exp(s)) truncated to levels 0..K-1 and renormalised; s (..., 1)."""
+    k = torch.arange(K, device=s.device, dtype=s.dtype)
+    return F.log_softmax(k * s - torch.lgamma(k + 1), dim=-1)
+
+
+def link_cdf(name, z, lam=None):
+    """Inverse link F(z) of a cumulative link model: P(y > k) = F(s + b_k)."""
+    if name == "logit":
+        return torch.sigmoid(z)
+    if name == "probit":
+        return 0.5 * (1 + torch.erf(z / 2 ** 0.5))
+    if name == "cloglog":
+        return -torch.expm1(-torch.exp(z.clamp(max=20)))
+    if name == "ao":                                   # Aranda-Ordaz: logit at lam = 1, cloglog as lam -> 0
+        return -torch.expm1(-torch.log1p(lam * torch.exp(z.clamp(max=20))) / lam)
+    raise ValueError(name)
+
+
+def log_pmf(head, out, K=None):
+    """Log-PMF (..., K) of raw outputs `out` of a head type. The single-score unimodal heads need K."""
     if head == "softmax":
         return F.log_softmax(out, dim=-1)
     if head == "corn":
         return corn_log_pmf(out)
     if head in ("coral", "or"):
         return cumulative_to_pmf(torch.sigmoid(out)).log()
+    if head in ("binom", "poisson"):
+        if K is None:
+            raise ValueError(f"{head} needs the number of levels K")
+        return (binom_log_pmf if head == "binom" else poisson_log_pmf)(out, K)
+    if head.startswith("clm_"):
+        link = head[4:]
+        if link == "ao":
+            z, lam = out[..., :-1], F.softplus(out[..., -1:]) + 1e-3
+            return cumulative_to_pmf(link_cdf("ao", z, lam)).log()
+        return cumulative_to_pmf(link_cdf(link, out)).log()
     raise ValueError(head)
 
 
@@ -125,6 +188,12 @@ def soft_coral_loss(logits, p):
 def ce_soft_loss(logits, p):
     """Soft-label cross-entropy (= KL label-distribution learning up to a constant)."""
     return -(p * F.log_softmax(logits, dim=-1)).sum(-1).mean(-1)
+
+
+def pmf_ce_loss(logp, p):
+    """Cross-entropy between the soft label p and any predicted log-PMF (the likelihood of every
+    proper soft loss on its own parameterisation)."""
+    return -(p * logp).sum(-1).mean(-1)
 
 
 def ce_hard_loss(logits, y):
@@ -199,10 +268,85 @@ def pll_loss(logp, mask):
 
 
 # --------------------------------------------------------------------------------------------
+# Further baselines: soft ordinal targets, distance-weighted CE
+# --------------------------------------------------------------------------------------------
+
+def sord_matrix(K, power=1, device=None, dtype=torch.float32):
+    """Row j is the SORD target of level j: softmax_k(-|k - j|^power) (Diaz & Marathe, 2019; power 1 is
+    the Laplace-shaped label distribution, power 2 the Gaussian-shaped one)."""
+    i = torch.arange(K, device=device, dtype=dtype)
+    d = (i[:, None] - i[None, :]).abs() ** power
+    return F.softmax(-d if power == 1 else -d / 2, dim=-1)
+
+
+def sord_loss(logits, p, power=1):
+    """SORD / Gaussian label-distribution cross-entropy with a set-valued label: the SORD target
+    of every level in the set, averaged (the soft label p convolved with the ordinal kernel)."""
+    target = p @ sord_matrix(p.shape[-1], power, p.device, p.dtype)
+    return ce_soft_loss(logits, target)
+
+
+def cdwce_loss(logits, p, alpha=2.0):
+    """Class-distance-weighted cross-entropy (Polat et al., 2022): -sum_k |k - y|^alpha log(1 - p_k),
+    averaged over the levels y of the set."""
+    K = p.shape[-1]
+    i = torch.arange(K, device=p.device, dtype=p.dtype)
+    w = p @ ((i[:, None] - i[None, :]).abs() ** alpha)           # (N, K): expected distance weights
+    probs = F.softmax(logits, -1)
+    return -(w * torch.log1p(-probs.clamp(max=1 - EPS))).sum(-1).mean(-1)
+
+
+# --------------------------------------------------------------------------------------------
+# Exact set likelihood (sets built from m independent raters)
+# --------------------------------------------------------------------------------------------
+
+_SUBSETS = {}
+
+
+def subset_tables(K, device):
+    """Indicator matrix A (2^K - 1, K) of all non-empty subsets of the K levels, and their sizes."""
+    key = (K, str(device))
+    if key not in _SUBSETS:
+        bits = (torch.arange(1, 2 ** K, device=device)[:, None] >> torch.arange(K, device=device)) & 1
+        _SUBSETS[key] = (bits.bool(), bits.sum(-1))
+    return _SUBSETS[key]
+
+
+def exact_set_logp(logp, mask, m):
+    """log P(S | pi_hat): probability that m independent ratings from the predicted PMF produce exactly
+    the observed set S, by inclusion-exclusion, P(S) = sum_{T subset S} (-1)^{|S|-|T|} pi(T)^m.
+    logp (..., N, K), mask (N, K) -> (..., N). Singletons give pi_k^m."""
+    K = logp.shape[-1]
+    A, size = subset_tables(K, logp.device)
+    mass = logp.exp() @ A.T.to(logp.dtype)                                   # pi(T), (..., N, 2^K - 1)
+    inside = ~((A[None] & ~mask[:, None, :]).any(-1))                        # T subset of S, (N, 2^K - 1)
+    sign = 1.0 - 2.0 * ((mask.sum(-1)[:, None] - size[None, :]) % 2).to(logp.dtype)
+    total = (inside * sign * mass.clamp_min(0) ** m).sum(-1)
+    return total.clamp_min(1e-12).log()
+
+
+def exact_set_loss(logp, mask, m):
+    return -exact_set_logp(logp, mask, m).mean(-1)
+
+
+def brute_force_set_prob(pmf, m):
+    """P(set of m iid ratings == S) for every set S, by enumerating all K^m rating tuples (used by tests).
+    pmf (K,) -> {frozenset: probability}."""
+    out = {}
+    for tup in itertools.product(range(len(pmf)), repeat=m):
+        pr = 1.0
+        for k in tup:
+            pr *= float(pmf[k])
+        key = frozenset(tup)
+        out[key] = out.get(key, 0.0) + pr
+    return out
+
+
+# --------------------------------------------------------------------------------------------
 # Registry
 # --------------------------------------------------------------------------------------------
 
-HEAD_OF = {
+CORE_METHODS = {
     "ce_hard": "softmax", "corn_hard": "corn", "coral_hard": "coral",
     "ce_soft": "softmax", "soft_coral": "coral", "soft_or": "or",
     "oldl_cad": "softmax", "oldl_qfd": "softmax", "oldl_cjs": "softmax",
@@ -210,7 +354,26 @@ HEAD_OF = {
     "soft_corn": "corn",
 }
 
-METHODS = list(HEAD_OF)
+# training targets other than uniform-over-set (need Target.c / Target.m)
+TARGET_METHODS = {
+    "soft_corn_emp": "corn", "ce_emp": "softmax", "soft_coral_emp": "coral",
+    "exact_corn": "corn", "exact_ce": "softmax", "exact_coral": "coral",
+    "soft_corn_mix50": "corn", "ce_mix50": "softmax", "soft_coral_mix50": "coral",
+}
+
+BASELINE_METHODS = {
+    "sord": "softmax", "sord_sq": "softmax", "cdwce": "softmax",
+    "binom": "binom", "poisson": "poisson",
+    "clm_logit": "clm_logit", "clm_probit": "clm_probit", "clm_cloglog": "clm_cloglog", "clm_ao": "clm_ao",
+}
+
+HEAD_OF = {**CORE_METHODS, **TARGET_METHODS, **BASELINE_METHODS}
+METHODS = list(CORE_METHODS)
+ALL_METHODS = list(HEAD_OF)
+
+# EnsembleHead output layer of every head type
+OUTPUT_OF = {"softmax": "full", "corn": "full", "or": "full", "coral": "coral", "binom": "coral",
+             "poisson": "coral", "clm_logit": "clm", "clm_probit": "clm", "clm_cloglog": "clm", "clm_ao": "clm_ao"}
 
 
 def compute_loss(method, out, t: Target):
@@ -237,8 +400,39 @@ def compute_loss(method, out, t: Target):
         return pll_loss(F.log_softmax(out, -1), t.mask)
     if method == "pll_corn":
         return pll_loss(corn_log_pmf(out), t.mask)
+    if method == "soft_corn_emp":
+        return soft_corn_loss(out, t.empirical)
+    if method == "ce_emp":
+        return ce_soft_loss(out, t.empirical)
+    if method == "soft_coral_emp":
+        return soft_coral_loss(out, t.empirical)
+    if method == "soft_corn_mix50":
+        return soft_corn_loss(out, 0.5 * t.p + 0.5 * t.empirical)
+    if method == "ce_mix50":
+        return ce_soft_loss(out, 0.5 * t.p + 0.5 * t.empirical)
+    if method == "soft_coral_mix50":
+        return soft_coral_loss(out, 0.5 * t.p + 0.5 * t.empirical)
+    if method in ("exact_corn", "exact_ce", "exact_coral"):
+        if t.m <= 0:
+            raise ValueError("the exact set likelihood needs the number of raters per set (Target.m)")
+        return exact_set_loss(log_pmf(HEAD_OF[method], out, t.p.shape[-1]), t.mask, t.m)
+    if method == "sord":
+        return sord_loss(out, t.p, 1)
+    if method == "sord_sq":
+        return sord_loss(out, t.p, 2)
+    if method == "cdwce":
+        return cdwce_loss(out, t.p)
+    if method in ("binom", "poisson") or method.startswith("clm_"):
+        return pmf_ce_loss(log_pmf(HEAD_OF[method], out, t.p.shape[-1]), t.p)
     raise ValueError(method)
 
 
 def output_dim(method, K):
-    return K if HEAD_OF[method] == "softmax" else K - 1
+    head = HEAD_OF[method]
+    if head == "softmax":
+        return K
+    if head in ("binom", "poisson"):
+        return 1
+    if head == "clm_ao":
+        return K                        # K - 1 cumulative logits plus the link parameter
+    return K - 1

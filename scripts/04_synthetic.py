@@ -6,7 +6,11 @@ test set is scored against the exact target t(x) = E[u_S | x] (`nll` - H(t) = KL
 and against the rater distribution pi(x) (`ho_nll` - H(pi) = KL(pi || p_hat)).
 
     python scripts/04_synthetic.py --families po cr --seeds 0 1 2 3 4
+    python scripts/04_synthetic.py --K 8 --out $SCB_DATA/results/synth_K8           # more levels
+    python scripts/04_synthetic.py --mechanism interval --out $SCB_DATA/results/synth_interval
 Output: $SCB_DATA/results/synthetic/<family>_m<m>_s<seed>_n<n>_<body>.npz
+Generator options (ordbench/synthetic.py): --K, --d, --signal, --nonlinear, --eps, --shift, --mechanism; keep each variant
+in its own --out folder. The defaults reproduce the main benchmark.
 """
 import argparse
 import json
@@ -38,6 +42,14 @@ def main():
     ap.add_argument("--bodies", nargs="+", default=["linear", "mlp"])
     ap.add_argument("--methods", nargs="+", default=METHODS)
     ap.add_argument("--m", type=int, default=3)
+    ap.add_argument("--K", type=int, default=5)
+    ap.add_argument("--d", type=int, default=10)
+    ap.add_argument("--signal", type=float, default=1.0, help="scale of the predictors")
+    ap.add_argument("--nonlinear", action="store_true", help="predictors with pairwise interactions")
+    ap.add_argument("--eps", type=float, default=0.0, help="probability that a rating is uniform noise")
+    ap.add_argument("--shift", type=float, nargs=3, default=None, metavar=("DOWN", "STAY", "UP"),
+                    help="probabilities that a rating is shifted by -1 / 0 / +1 levels (rater heterogeneity)")
+    ap.add_argument("--mechanism", choices=S.MECHANISMS, default="raters")
     ap.add_argument("--n_val", type=int, default=2000)
     ap.add_argument("--n_test", type=int, default=10000)
     ap.add_argument("--steps", type=int, default=2000)
@@ -49,15 +61,24 @@ def main():
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     torch.backends.cuda.matmul.allow_tf32 = True      # TF32 tensor cores for the GEMMs
 
+    kw = dict(d=a.d, K=a.K, signal=a.signal, nonlinear=a.nonlinear, eps=a.eps,
+              shift=tuple(a.shift) if a.shift else None, mechanism=a.mechanism)
+    rated = a.mechanism == "raters"
+    m_eff = a.m if rated else 0               # raters per set (known only when sets come from ratings)
     for seed in a.seeds:                       # seeds outermost: partial runs cover every family
         for fam in a.families:
             # one problem (pi(.)) per seed; train / val / test are independent draws from it
-            Xp, Mp, _ = S.make(fam, max(a.n_train), a.m, seed=100 * seed + 1, param_seed=seed)
-            Xv, Mv, _ = S.make(fam, a.n_val, a.m, seed=100 * seed + 2, param_seed=seed)
-            Xt, Mt, pit = S.make(fam, a.n_test, a.m, seed=100 * seed + 3, param_seed=seed)
-            tt = S.set_target(pit, a.m)
-            evalsets = {"val": make_evalset(Xv, Mv, device=dev),
-                        "test": make_evalset(Xt, Mt, p=tt, ho=pit, device=dev)}
+            if rated:
+                Xp, Mp, _, Rp = S.make(fam, max(a.n_train), a.m, seed=100 * seed + 1, param_seed=seed,
+                                       return_ratings=True, **kw)
+                Cp = np.eye(a.K)[Rp].sum(1)               # counts of the m ratings behind each training set
+            else:
+                Xp, Mp, _ = S.make(fam, max(a.n_train), a.m, seed=100 * seed + 1, param_seed=seed, **kw)
+                Cp = None
+            Xv, Mv, _ = S.make(fam, a.n_val, a.m, seed=100 * seed + 2, param_seed=seed, **kw)
+            Xt, Mt, pit, tt = S.make(fam, a.n_test, a.m, seed=100 * seed + 3, param_seed=seed, return_target=True, **kw)
+            evalsets = {"val": make_evalset(Xv, Mv, device=dev, m=m_eff),
+                        "test": make_evalset(Xt, Mt, p=tt, ho=pit, device=dev, m=m_eff)}
             ev = evalsets["test"]
             oracle = {}
             for name, q in (("t", tt), ("pi", pit)):
@@ -69,9 +90,11 @@ def main():
                     if f.exists():
                         continue
                     t0 = time.time()
-                    res, steps = run_cell(Xp[:n], Mp[:n], evalsets, 5, a.methods, body=body, seed=seed,
-                                          steps=a.steps, eval_every=a.eval_every, device=dev)
-                    meta = dict(family=fam, m=a.m, seed=seed, n_train=n, body=body, K=5,
+                    res, steps = run_cell(Xp[:n], Mp[:n], evalsets, a.K, a.methods, body=body, seed=seed,
+                                          steps=a.steps, eval_every=a.eval_every, device=dev,
+                                          counts_tr=None if Cp is None else Cp[:n], m=m_eff)
+                    meta = dict(family=fam, m=a.m, seed=seed, n_train=n, body=body, K=a.K, d=a.d, signal=a.signal,
+                                nonlinear=a.nonlinear, eps=a.eps, shift=a.shift, mechanism=a.mechanism,
                                 H_t=entropy(tt), H_pi=entropy(pit), oracle=oracle,
                                 configs=CONFIGS, methods=a.methods, prior=prior_metrics(Mp[:n], evalsets))
                     np.savez_compressed(f, steps=steps, meta=json.dumps(meta), **flatten(res))

@@ -123,7 +123,50 @@ def test_linear_probe_init_fits_features_and_keeps_head_usable(method):
     enc = torch.nn.Identity()
     data = Toy(X)
     prior_nll = float(evaluate(log_pmf(HEAD_OF[method], head(X[va]).detach()), val)["nll"])
-    wd = linear_probe_init(head, method, enc, data, tr, Ttr, val, "cpu", steps=300)
+    wd, plr = linear_probe_init(head, method, enc, data, tr, Ttr, val, "cpu", steps=300)
     nll = float(evaluate(log_pmf(HEAD_OF[method], head(X[va]).detach()), val)["nll"])
-    assert wd in (0.01, 0.1, 1.0, 10.0)
+    assert wd in (0.01, 0.1, 1.0, 10.0) and plr == 1e-2
+    wd2, plr2 = linear_probe_init(head, method, enc, data, tr, Ttr, val, "cpu", wds=(0.001, 0.1), lrs=(3e-3, 3e-2), steps=200)
+    assert wd2 in (0.001, 0.1) and plr2 in (3e-3, 3e-2)
     assert nll < prior_nll - 0.05, (prior_nll, nll)
+
+
+def test_text_encoder_trains_in_fp32_even_if_the_checkpoint_is_fp16(tmp_path):
+    """transformers 5 loads a checkpoint in its stored dtype, and DeBERTa-v3-base is stored in fp16: AdamW's eps = 1e-8
+    underflows to zero there and the first step turns every weight into NaN. The encoder must hold fp32 weights."""
+    transformers = pytest.importorskip("transformers")
+    from ordbench.finetune import TextEncoder
+    cfg = transformers.BertConfig(hidden_size=16, num_hidden_layers=1, num_attention_heads=2, intermediate_size=32,
+                                  vocab_size=50)
+    transformers.BertModel(cfg).half().save_pretrained(tmp_path)
+    enc = TextEncoder(str(tmp_path))
+    assert {p.dtype for p in enc.parameters()} == {torch.float32}
+    ids, mask = torch.randint(0, 50, (2, 6)), torch.ones(2, 6, dtype=torch.long)
+    opt = torch.optim.AdamW(enc.parameters(), lr=1e-3)
+    enc(ids, mask).pow(2).mean().backward()
+    opt.step()
+    assert all(torch.isfinite(p).all() for p in enc.parameters())
+
+
+@pytest.mark.parametrize("has_output_dim", [True, False])
+def test_image_encoder_reads_feature_size_with_or_without_output_dim(monkeypatch, has_output_dim):
+    """open_clip's SigLIP vision tower is a timm model without `output_dim`; the encoder must still find its feature size."""
+    open_clip = pytest.importorskip("open_clip")
+    from ordbench import finetune
+
+    class Tower(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.proj = torch.nn.Linear(3 * 8 * 8, 12)
+            if has_output_dim:
+                self.output_dim = 12
+
+        def forward(self, x):
+            return self.proj(x.flatten(1))
+
+    stub = type("Clip", (), {"visual": Tower()})()
+    monkeypatch.setattr(open_clip, "create_model_and_transforms", lambda arch, pretrained: (stub, None, None))
+    monkeypatch.setattr(finetune, "image_preproc", lambda spec: (8, (0.5,) * 3, (0.5,) * 3))
+    enc = finetune.ImageEncoder("Stub-Arch/none")
+    assert enc.dim == 12
+    assert enc.v.training

@@ -30,6 +30,8 @@ torchvision>=0.19
 transformers>=4.44
 sentence-transformers>=3.0
 open_clip_torch>=2.24
+tiktoken>=0.7             # tokenizer of DeBERTa-v3 under transformers 5
+sentencepiece>=0.2
 
 # development
 pytest>=8

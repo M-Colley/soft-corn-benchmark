@@ -5,6 +5,8 @@ copy). Raw files land in $SCB_DATA/raw/<name>/ and are never modified afterwards
 
     python scripts/01_download.py            # all datasets
     python scripts/01_download.py mhs cb     # a subset
+    python scripts/01_download.py vader convabuse   # the extra datasets (FUTURE_WORK item 6); not in the default set
+    python scripts/01_download.py provoice          # the in-vehicle study with natively set-valued labels (~0.55 GB)
 """
 import sys
 import zipfile
@@ -83,11 +85,49 @@ def scut_fbp5500():
     print("  ->", [p.name for p in out.iterdir()])
 
 
+def vader():
+    # Hutto & Gilbert (2014), VADER ground truth: texts of four corpora with >= 20 raters each on a -4..+4 sentiment
+    # scale (MIT, github.com/cjhutto/vaderSentiment). The tarball is extracted into its own fresh directory with the
+    # tar "data" filter, which refuses paths outside it and special files.
+    import tarfile
+    out = RAW / "vader"
+    tgz = _get("https://raw.githubusercontent.com/cjhutto/vaderSentiment/master/additional_resources/hutto_ICWSM_2014.tar.gz",
+               out / "hutto_ICWSM_2014.tar.gz")
+    dest = out / "extracted"
+    if not dest.exists():
+        dest.mkdir()
+        with tarfile.open(tgz) as t:
+            t.extractall(dest, filter="data")
+    print("  ->", sorted(str(p.relative_to(dest)) for p in dest.rglob("*") if p.is_file())[:12])
+
+
+def convabuse():
+    # Cercas Curry, Abercrombie & Rieser (2021), ConvAbuse: abuse severity (-3..1, ordered) from up to 8 annotators per
+    # example (CC-BY-4.0, github.com/amandacurry/convabuse). Examples of one chatbot are withheld by the authors.
+    out = RAW / "convabuse"
+    base = "https://raw.githubusercontent.com/amandacurry/convabuse/master/"
+    _get(base + "1_full/ConvAbuseEMNLPfull.csv", out / "ConvAbuseEMNLPfull.csv")
+    _get(base + "README.md", out / "README.md")
+
+
+def provoice():
+    # ProVoice study 1 (CC-BY-NC-4.0, huggingface.co/datasets/ProVoice-proactivity/proactivity_preference_dataset): 12 drivers,
+    # 1,446 prompts, each answered with the set of acceptable levels of autonomy (0-4); 6.8% of the answers are sets.
+    # Only the label tables and the preprocessed frames are fetched (the raw and joined frame files are redundant).
+    out = RAW / "provoice"
+    for name in ("README.md", "data/labels.csv", "data/labels.jsonl", "data/frames_preprocessed.jsonl"):
+        hf_hub_download("ProVoice-proactivity/proactivity_preference_dataset", name, repo_type="dataset", local_dir=out)
+    print("  ->", sorted(str(f.relative_to(out)) for f in out.rglob("*") if f.is_file() and ".cache" not in f.parts))
+
+
 ALL = {"mhs": mhs, "wikitox": wiki_toxicity, "humicroedit": humicroedit,
-       "cb": commitmentbank, "scut": scut_fbp5500}
+       "cb": commitmentbank, "scut": scut_fbp5500, "vader": vader, "convabuse": convabuse,
+       "provoice": provoice}
+
+EXTRA = {"vader", "convabuse", "provoice"}
 
 if __name__ == "__main__":
-    names = sys.argv[1:] or list(ALL)
+    names = sys.argv[1:] or [n for n in ALL if n not in EXTRA]
     for n in names:
         print(f"[{n}]")
         ALL[n]()

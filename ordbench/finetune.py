@@ -2,7 +2,9 @@
 
 Text: sentence-transformers/all-mpnet-base-v2 (Hugging Face transformers, mean pooling); any other
 Hugging Face encoder can be named with `text_model`. Images: the OpenCLIP ViT-B/16 (LAION-2B) image
-tower. Each loss trains its own copy of the backbone, so the loss can shape the representation. The
+tower; `image_model` names another OpenCLIP model as "arch/pretrained" (for example
+"ViT-B-16-SigLIP/webli") or a Hugging Face vision model as "hf:<name>" (for example "hf:facebook/dinov2-base").
+Each loss trains its own copy of the backbone, so the loss can shape the representation. The
 output heads, losses and metrics are the ones used for the frozen-feature benchmark.
 
 Head initialisation (`init`): "prior" starts every head at the training-label marginal (default);
@@ -19,13 +21,16 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
+from . import extra_data
 from .heads import EnsembleHead
-from .losses import HEAD_OF, Target, compute_loss, log_pmf, output_dim
+from .losses import HEAD_OF, OUTPUT_OF, Target, compute_loss, log_pmf, output_dim
 from .metrics import evaluate
 from .paths import RAW
 
 TEXT_MODEL = "sentence-transformers/all-mpnet-base-v2"
 IMAGE_MODEL = ("ViT-B-16", "laion2b_s34b_b88k")
+DEFAULT_IMAGE = "/".join(IMAGE_MODEL)
+CLIP_MEAN, CLIP_STD = (0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)
 MAX_LEN = {"cb": 256}            # default 128 tokens
 
 
@@ -55,6 +60,13 @@ def load_inputs(name, item_id):
     if name == "scut":
         root = RAW / "scut" / "SCUT-FBP5500_v2" / "Images"
         return [str(root / f) for f in item_id]
+    if name in extra_data.VADER:
+        ids, texts, _ = extra_data.vader_items(name)
+        pos = {str(i): j for j, i in enumerate(ids)}
+        return [texts[pos[str(i)]] for i in item_id]
+    if name == "convabuse":
+        _, texts, _ = extra_data.convabuse_items()
+        return [texts[int(i)] for i in item_id]
     raise ValueError(name)
 
 
@@ -80,11 +92,27 @@ class TextData:
         return ids.to(device, non_blocking=True), mask.to(device, non_blocking=True)
 
 
+def image_preproc(spec=DEFAULT_IMAGE):
+    """(input size, mean, std) of an image backbone given as "arch/pretrained" (OpenCLIP) or "hf:<name>"."""
+    if spec == DEFAULT_IMAGE:
+        return 224, CLIP_MEAN, CLIP_STD
+    if spec.startswith("hf:"):
+        from transformers import AutoImageProcessor
+        proc = AutoImageProcessor.from_pretrained(spec[3:])
+        size = proc.crop_size["height"] if getattr(proc, "crop_size", None) else proc.size["height"]
+        return size, tuple(proc.image_mean), tuple(proc.image_std)
+    import open_clip
+    arch, tag = spec.split("/", 1)
+    cfg = open_clip.get_pretrained_cfg(arch, tag) or {}
+    size = open_clip.get_model_config(arch)["vision_cfg"]["image_size"]
+    return size, tuple(cfg.get("mean") or CLIP_MEAN), tuple(cfg.get("std") or CLIP_STD)
+
+
 class ImageData:
     """Images resized and centre-cropped once (CLIP preprocessing without normalisation), kept as
     uint8; normalisation happens on the GPU."""
 
-    def __init__(self, paths, size=224):
+    def __init__(self, paths, size=224, mean=CLIP_MEAN, std=CLIP_STD):
         from PIL import Image
         from torchvision.transforms import functional as TF
         arr = np.empty((len(paths), 3, size, size), np.uint8)
@@ -94,8 +122,8 @@ class ImageData:
             arr[i] = np.asarray(im).transpose(2, 0, 1)
         self.x = torch.from_numpy(arr)
         self.lengths = np.ones(len(paths), int)
-        self.mean = torch.tensor([0.48145466, 0.4578275, 0.40821073]).view(1, 3, 1, 1)
-        self.std = torch.tensor([0.26862954, 0.26130258, 0.27577711]).view(1, 3, 1, 1)
+        self.mean = torch.tensor(mean).view(1, 3, 1, 1)
+        self.std = torch.tensor(std).view(1, 3, 1, 1)
 
     def batch(self, idx, device):
         x = self.x[idx].to(device, non_blocking=True).float().div_(255)
@@ -107,10 +135,12 @@ class ImageData:
 # --------------------------------------------------------------------------------------------
 
 class TextEncoder(nn.Module):
-    def __init__(self, model=TEXT_MODEL):
+    def __init__(self, model=TEXT_MODEL, grad_ckpt=False):
         super().__init__()
         from transformers import AutoModel
-        self.m = AutoModel.from_pretrained(model)
+        self.m = AutoModel.from_pretrained(model, dtype=torch.float32)   # not the stored dtype (DeBERTa-v3 is fp16)
+        if grad_ckpt:                       # trade compute for memory on the large encoders
+            self.m.gradient_checkpointing_enable()
         self.dim = self.m.config.hidden_size
 
     def forward(self, ids, mask):
@@ -120,23 +150,38 @@ class TextEncoder(nn.Module):
 
 
 class ImageEncoder(nn.Module):
-    def __init__(self):
+    def __init__(self, spec=DEFAULT_IMAGE):
         super().__init__()
-        import open_clip
-        model, _, _ = open_clip.create_model_and_transforms(IMAGE_MODEL[0], pretrained=IMAGE_MODEL[1])
-        self.v = model.visual
-        self.dim = self.v.output_dim
+        self.hf = spec.startswith("hf:")
+        if self.hf:
+            from transformers import AutoModel
+            self.v = AutoModel.from_pretrained(spec[3:], dtype=torch.float32)
+            self.dim = self.v.config.hidden_size
+        else:
+            import open_clip
+            arch, tag = spec.split("/", 1)
+            model, _, _ = open_clip.create_model_and_transforms(arch, pretrained=tag)
+            self.v = model.visual
+            # SigLIP's vision tower is a timm model without output_dim: read the feature size off a dummy forward pass
+            self.dim = getattr(self.v, "output_dim", None)
+            if self.dim is None:
+                size = image_preproc(spec)[0]
+                with torch.no_grad():
+                    self.dim = self.v.eval()(torch.zeros(1, 3, size, size)).shape[-1]
+                self.v.train()
 
     def forward(self, x):
-        return self.v(x)
+        return self.v(pixel_values=x).pooler_output if self.hf else self.v(x)
 
 
-def make(name, text_model=TEXT_MODEL):
-    return ImageEncoder() if name == "scut" else TextEncoder(text_model)
+def make(name, text_model=TEXT_MODEL, image_model=DEFAULT_IMAGE, grad_ckpt=False):
+    return ImageEncoder(image_model) if name == "scut" else TextEncoder(text_model, grad_ckpt)
 
 
-def make_data(name, inputs, text_model=TEXT_MODEL):
-    return ImageData(inputs) if name == "scut" else TextData(inputs, MAX_LEN.get(name, 128), text_model)
+def make_data(name, inputs, text_model=TEXT_MODEL, image_model=DEFAULT_IMAGE):
+    if name == "scut":
+        return ImageData(inputs, *image_preproc(image_model))
+    return TextData(inputs, MAX_LEN.get(name, 128), text_model)
 
 
 # --------------------------------------------------------------------------------------------
@@ -223,21 +268,23 @@ def _fold_standardisation(W, b, mu, sd):
     return W, b - W @ mu
 
 
-def linear_probe_init(head, method, enc, data, tr, Ttr, val, device, wds=(0.01, 0.1, 1.0, 10.0), lr=1e-2,
+def linear_probe_init(head, method, enc, data, tr, Ttr, val, device, wds=(0.01, 0.1, 1.0, 10.0), lrs=(1e-2,),
                       steps=500, batch=256, seed=0):
     """Fit `head` on the frozen features of the pretrained encoder (the first stage of LP-FT).
-    A small ensemble of coupled-L2 strengths `wds` is trained exactly like the frozen-feature benchmark
-    (standardised features, Adam, biases at the training-label marginal) and the member with the best
-    validation NLL is copied into `head`, with the standardisation folded into its weights."""
+    An ensemble over the grid of coupled-L2 strengths `wds` x learning rates `lrs` is trained exactly like the
+    frozen-feature benchmark (standardised features, Adam, biases at the training-label marginal) and the member
+    with the best validation NLL is copied into `head`, with the standardisation folded into its weights.
+    Returns the chosen (L2, learning rate)."""
     from .heads import MemberAdam
     from .train import batch_schedule
     Z, Zv = encode(enc, data, tr, device), encode(enc, data, val["idx"], device)
     mu, sd = Z.mean(0), Z.std(0) + 1e-6
     Z, Zv = (Z - mu) / sd, (Zv - mu) / sd
-    M = len(wds)
+    grid = [(w, lr) for lr in lrs for w in wds]
+    M = len(grid)
     probe = EnsembleHead(M, Z.shape[1], head.b.shape[-1], body="linear", output=head.output, seed=seed).to(device)
     init_bias_to_prior(probe, method, Ttr.p[torch.as_tensor(tr)].mean(0))
-    opt = MemberAdam(list(probe.named_parameters()), [lr] * M, list(wds), probe.decay_mask())
+    opt = MemberAdam(list(probe.named_parameters()), [g[1] for g in grid], [g[0] for g in grid], probe.decay_mask())
     T = Target(*(v[torch.as_tensor(tr)].to(device) for v in (Ttr.p, Ttr.mask, Ttr.y)))
     for idx in batch_schedule(len(Z), batch, steps, seed).to(device):
         opt.zero_grad()
@@ -248,24 +295,26 @@ def linear_probe_init(head, method, enc, data, tr, Ttr, val, device, wds=(0.01, 
         W, b = _fold_standardisation(probe.W[j], probe.b[j], mu, sd)
         head.W.copy_(W[None])
         head.b.copy_(b[None])
-    return wds[j]
+    return grid[j]
 
 
 def train_run(name, method, K, data, tr, evalsets, lr, epochs, seed, batch=32, wd=0.01, warmup=0.1,
-              head_lr=1e-3, device="cuda", log=print, init="prior", text_model=TEXT_MODEL):
+              head_lr=1e-3, device="cuda", log=print, init="prior", text_model=TEXT_MODEL, image_model=DEFAULT_IMAGE,
+              grad_ckpt=False, probe=None):
     """Fine-tune one backbone with one loss and backbone learning rate `lr`. The freshly initialised
     output head trains at `head_lr` (the same for every method): at backbone learning rates
     CORAL's threshold biases, and to a lesser degree CORN's, barely move from their initial values
     within a few hundred steps, which handicaps those heads. Returns {split: {metric: (epochs,)}}."""
     from transformers import get_linear_schedule_with_warmup
     torch.manual_seed(seed)
-    enc = make(name, text_model).to(device)
+    enc = make(name, text_model, image_model, grad_ckpt).to(device)
     Ttr = evalsets["_train_target"]
     head = EnsembleHead(1, enc.dim, output_dim(method, K), body="linear",
-                        output="coral" if HEAD_OF[method] == "coral" else "full", seed=seed).to(device)
+                        output=OUTPUT_OF[HEAD_OF[method]], seed=seed).to(device)
     init_bias_to_prior(head, method, Ttr.p[torch.as_tensor(tr)].mean(0))
     if init == "lpft":
-        log(f"    linear probe: L2 {linear_probe_init(head, method, enc, data, tr, Ttr, evalsets['val'], device, seed=seed):g}")
+        w, plr = linear_probe_init(head, method, enc, data, tr, Ttr, evalsets["val"], device, seed=seed, **(probe or {}))
+        log(f"    linear probe: L2 {w:g}, lr {plr:g}")
     elif init != "prior":
         raise ValueError(init)
     groups = ([dict(g, lr=lr) for g in _param_groups([enc], wd)]

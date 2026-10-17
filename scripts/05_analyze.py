@@ -102,6 +102,7 @@ def pairwise(df, keys, metric, crit, baselines, tcols=("n_train", "n_test")):
         loss = ((per["diff"] > 0) & (per.p < 0.05)).sum()
         try:
             rope = ROPE.get(metric, ROPE.get(metric.rsplit("_", 1)[0], 0.0))   # e.g. nll_gapped -> nll
+            np.random.seed(0)  # baycomp samples from numpy's global generator: fix it so the tables reproduce exactly
             pl, pr, pg = baycomp.SignedRankTest.probs(per.a.values, per.b.values, rope=rope)
         except Exception:
             pl = pr = pg = np.nan
@@ -584,7 +585,7 @@ def main():
         m_ablation(df, lines)
         frames = {}
         for ft_dir in sorted(RUNS.glob("finetune*")):
-            if ft_dir.is_dir():
+            if ft_dir.is_dir() and not ft_dir.name.endswith("_check"):     # *_check folders: see scripts/07_checks.py
                 ft = finetune_section(df, lines, ft_dir, ft_dir.name)
                 if ft is not None:
                     frames[ft_dir.name] = ft

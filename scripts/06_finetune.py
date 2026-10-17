@@ -11,6 +11,7 @@ frozen-feature runs. Splits, set labels (m = 3) and held-out raters are those of
     python scripts/06_finetune.py --datasets cb mhs --seeds 0 1 2
     python scripts/06_finetune.py --init lpft --out $SCB_DATA/results/finetune_lpft      # LP-FT variant
     python scripts/06_finetune.py --text_model microsoft/deberta-v3-base --out $SCB_DATA/results/finetune_deberta
+    python scripts/06_finetune.py --datasets scut --image_model hf:facebook/dinov2-base --out $SCB_DATA/results/finetune_dinov2
 Output: $SCB_DATA/results/finetune/<dataset>_m3_s<seed>_n<n>_finetune__<method>.npz (finished files are skipped)
 """
 import argparse
@@ -49,12 +50,19 @@ def main():
     ap.add_argument("--init", choices=("prior", "lpft"), default="prior",
                     help="head initialisation: training-label marginal, or linear probe on frozen features then fine-tune")
     ap.add_argument("--text_model", default=FT.TEXT_MODEL, help="Hugging Face encoder for the text datasets")
+    ap.add_argument("--image_model", default=FT.DEFAULT_IMAGE,
+                    help='image backbone: OpenCLIP "arch/pretrained" or Hugging Face "hf:<name>"')
+    ap.add_argument("--grad_ckpt", action="store_true", help="gradient checkpointing (large text encoders)")
+    ap.add_argument("--lp_wds", nargs="+", type=float, help="LP-FT probe: L2 grid (default 0.01 0.1 1 10)")
+    ap.add_argument("--lp_lrs", nargs="+", type=float, help="LP-FT probe: learning-rate grid (default 0.01)")
+    ap.add_argument("--lp_steps", type=int, help="LP-FT probe: training steps (default 500)")
     ap.add_argument("--lr_per_seed", action="store_true", help="select the learning rate on every seed, not only seed 0")
     ap.add_argument("--out", default=str(RUNS / "finetune"))
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     torch.backends.cuda.matmul.allow_tf32 = True
+    probe = {k: v for k, v in (("wds", a.lp_wds), ("lrs", a.lp_lrs), ("steps", a.lp_steps)) if v}
     dev = "cuda"
     m = 3
     for name in a.datasets:
@@ -73,7 +81,7 @@ def main():
                 continue
             if data is None:
                 t0 = time.time()
-                data = FT.make_data(name, inputs, a.text_model)
+                data = FT.make_data(name, inputs, a.text_model, a.image_model)
                 print(f"[{name}] inputs ready in {time.time() - t0:.0f}s", flush=True)
             evalsets = {"val": make_evalset(np.zeros((len(va), 1)), mask[va], device=dev),
                         "test": make_evalset(np.zeros((len(te), 1)), mask[te], ho=ho[te], device=dev)}
@@ -95,7 +103,8 @@ def main():
                     t0 = time.time()
                     print(f"{f.stem}  lr={lr:g}", flush=True)
                     res[lr] = FT.train_run(name, method, K, data, tr, evalsets, lr, epochs, seed, head_lr=a.head_lr, device=dev,
-                                           log=lambda s: print(s, flush=True), init=a.init, text_model=a.text_model)
+                                           log=lambda s: print(s, flush=True), init=a.init, text_model=a.text_model,
+                                           image_model=a.image_model, grad_ckpt=a.grad_ckpt, probe=probe)
                     print(f"    done in {time.time() - t0:.0f}s", flush=True)
                 arrays = {}
                 for split in ("val", "test"):
@@ -104,7 +113,9 @@ def main():
                 meta = dict(dataset=name, m=m, seed=seed, n_train=len(tr), pool=len(pool), body="finetune",
                             K=K, n_val=len(va), n_test=len(te), configs=[(lr, 0.01) for lr in lrs],
                             methods=[method], prior=prior, epochs=epochs, head_lr=a.head_lr, init=a.init,
-                            backbone=("open_clip " + "/".join(FT.IMAGE_MODEL)) if name == "scut" else a.text_model)
+                            lp_probe=probe or None,
+                            backbone=(a.image_model if a.image_model.startswith("hf:") else "open_clip " + a.image_model)
+                            if name == "scut" else a.text_model)
                 np.savez_compressed(f, steps=np.arange(1, epochs + 1), meta=json.dumps(meta), **arrays)
 
 

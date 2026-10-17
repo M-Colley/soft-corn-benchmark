@@ -12,6 +12,9 @@ Set-valued targets (built from the m annotators used for training):
 Held-out annotators (ratings never used to build any label or to select a model):
     ho_nll, ho_rps, ho_emd, ho_mae  scored against the empirical distribution of each item's
                 held-out ratings, averaged over items that have any
+xnll (only when the number m of raters per set is known): -log P(S | pi_hat), the exact likelihood of the
+                observed sets under m independent ratings from the predicted PMF; a target-agnostic
+                validation criterion for models trained on different soft targets
 Point predictions use the median of the predicted PMF ("med", the CORN/CORAL decision rule)
 or its mode ("mode").
 
@@ -31,6 +34,8 @@ Set-valued predictions and calibration (what an application that shows an accept
 without host-device synchronisation.
 """
 import torch
+
+from .losses import exact_set_logp
 
 SET_TYPES = ("single", "contig", "gapped")
 LEVELS = (0.5, 0.8, 0.9)        # nominal mass of the predicted intervals
@@ -111,9 +116,9 @@ def _ho_ece(F_hat, ev, bins=ECE_BINS):
     return gap.mean(-1)
 
 
-def prepare(p, mask, ho_counts=None, min_group=5):
+def prepare(p, mask, ho_counts=None, min_group=5, m=0):
     mask = mask.bool()
-    ev = dict(p=p, mask=mask, F=torch.cumsum(p, -1), types=set_types(mask))
+    ev = dict(p=p, mask=mask, F=torch.cumsum(p, -1), types=set_types(mask), m=m)
     sd = _sd(p)
     ev["sd_c"] = sd - sd.mean()
     ev["groups"] = {}
@@ -151,6 +156,8 @@ def evaluate(logp, ev):
     rps_i = ((F_hat - ev["F"])[..., :-1] ** 2).sum(-1) / (K - 1)
     emd_i = (F_hat - ev["F"]).abs().sum(-1)
     out.update(nll=nll_i.mean(-1), pll=pll_i.mean(-1), rps=rps_i.mean(-1), emd=emd_i.mean(-1))
+    if ev.get("m", 0) > 0:      # exact likelihood of the observed sets when they come from m independent raters
+        out["xnll"] = -exact_set_logp(logp, mask, ev["m"]).mean(-1)
 
     sd_hat = _sd(pmf)
     a = sd_hat - sd_hat.mean(-1, keepdim=True)

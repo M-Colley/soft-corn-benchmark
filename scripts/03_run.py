@@ -27,16 +27,43 @@ from ordbench.train import LRS, WDS, flatten, make_evalset, prior_metrics, run_c
 DATASETS = ("cb", "scut", "humicroedit", "mhs", "wikitox")
 
 
+def rating_counts(z):
+    """(n, K) counts of all ratings of every item."""
+    K, ptr = int(z["K"]), z["ratings_ptr"]
+    cnt = np.zeros((len(ptr) - 1, K), np.int32)
+    np.add.at(cnt, (np.repeat(np.arange(len(ptr) - 1), np.diff(ptr)), z["ratings_flat"]), 1)
+    return cnt
+
+
 def load(name, m):
+    """Features, set masks, held-out rating counts, K and the counts of the m ratings behind each set
+    (all ratings minus the held-out ones) for the items that have at least m ratings."""
     z = np.load(PROCESSED / f"{name}.npz", allow_pickle=True)
     v = z[f"valid_m{m}"]
-    return z["X"][v], z[f"mask_m{m}"][v], z[f"ho_m{m}"][v], int(z["K"])
+    return z["X"][v], z[f"mask_m{m}"][v], z[f"ho_m{m}"][v], int(z["K"]), (rating_counts(z) - z[f"ho_m{m}"])[v]
 
 
-def split(n, seed, test=0.2, val=0.1):
-    perm = np.random.default_rng(seed).permutation(n)
-    nt, nv = round(test * n), round(val * n)
-    return perm[:nt], perm[nt:nt + nv], perm[nt + nv:]
+def load_groups(name, m):
+    """Group of every row (for example the situation of a user-situation pair) when the processed file has one:
+    the rows of a group are never split across test, validation and training."""
+    z = np.load(PROCESSED / f"{name}.npz", allow_pickle=True)
+    return z["group"][z[f"valid_m{m}"]] if "group" in z.files else None
+
+
+def split(n, seed, test=0.2, val=0.1, groups=None):
+    """Random test / validation / training-pool indices; with `groups`, whole groups are assigned to a split."""
+    if groups is None:
+        perm = np.random.default_rng(seed).permutation(n)
+        nt, nv = round(test * n), round(val * n)
+        return perm[:nt], perm[nt:nt + nv], perm[nt + nv:]
+    rng = np.random.default_rng(seed)
+    uniq = np.unique(groups)
+    perm = rng.permutation(len(uniq))
+    nt, nv = round(test * len(uniq)), round(val * len(uniq))
+
+    def rows(sel):
+        return np.flatnonzero(np.isin(groups, uniq[sel]))
+    return rows(perm[:nt]), rows(perm[nt:nt + nv]), rng.permutation(rows(perm[nt + nv:]))
 
 
 def main():
@@ -46,11 +73,13 @@ def main():
     ap.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2, 3, 4])
     ap.add_argument("--n_train", nargs="+", default=["128", "512", "2048", "8192", "full"])
     ap.add_argument("--bodies", nargs="+", default=["linear", "mlp"])
-    ap.add_argument("--methods", nargs="+", default=METHODS)
+    ap.add_argument("--methods", nargs="+", default=METHODS, help="core twelve by default; see ordbench.losses.ALL_METHODS")
     ap.add_argument("--steps", type=int, default=2000)
     ap.add_argument("--eval_every", type=int, default=100)
     ap.add_argument("--wds", nargs="+", type=float, default=None, help="override the L2 grid")
     ap.add_argument("--lrs", nargs="+", type=float, default=None, help="override the learning-rate grid")
+    ap.add_argument("--test_frac", type=float, default=0.2, help="share of items (or of groups) held out for testing")
+    ap.add_argument("--val_frac", type=float, default=0.1, help="share of items (or of groups) used for selection")
     ap.add_argument("--out", default=str(RUNS / "real"))
     a = ap.parse_args()
     configs = [(lr, wd) for lr in (a.lrs or LRS) for wd in (a.wds or WDS)]
@@ -65,8 +94,8 @@ def main():
             for m in a.m:
                 if (name, m) not in data:
                     data[name, m] = load(name, m)
-                X, mask, ho, K = data[name, m]
-                te, va, pool = split(len(X), seed)
+                X, mask, ho, K, cnt = data[name, m]
+                te, va, pool = split(len(X), seed, a.test_frac, a.val_frac, groups=load_groups(name, m))
                 sizes = sorted({min(len(pool) if s == "full" else int(s), len(pool)) for s in a.n_train})
                 for n in sizes:
                     todo = [b for b in a.bodies if not (out_dir / f"{name}_m{m}_s{seed}_n{n}_{b}.npz").exists()]
@@ -75,15 +104,17 @@ def main():
                     tr = pool[:n]
                     mu, sd = X[tr].mean(0), X[tr].std(0) + 1e-6
                     Z = (X - mu) / sd
-                    evalsets = {"val": make_evalset(Z[va], mask[va], device=dev),
-                                "test": make_evalset(Z[te], mask[te], ho=ho[te], device=dev)}
+                    evalsets = {"val": make_evalset(Z[va], mask[va], device=dev, m=m),
+                                "test": make_evalset(Z[te], mask[te], ho=ho[te], device=dev, m=m)}
                     for body in todo:
                         f = out_dir / f"{name}_m{m}_s{seed}_n{n}_{body}.npz"
                         t0 = time.time()
                         res, steps = run_cell(Z[tr], mask[tr], evalsets, K, a.methods, body=body, seed=seed,
-                                              steps=a.steps, eval_every=a.eval_every, configs=configs, device=dev)
+                                              steps=a.steps, eval_every=a.eval_every, configs=configs, device=dev,
+                                              counts_tr=cnt[tr], m=m)
                         meta = dict(dataset=name, m=m, seed=seed, n_train=n, pool=len(pool), body=body,
-                                    K=K, n_val=len(va), n_test=len(te), configs=configs, methods=a.methods,
+                                    K=K, n_val=len(va), n_test=len(te), test_frac=a.test_frac, val_frac=a.val_frac,
+                                    configs=configs, methods=a.methods,
                                     prior=prior_metrics(mask[tr], evalsets))
                         np.savez_compressed(f, steps=steps, meta=json.dumps(meta), **flatten(res))
                         print(f"{f.name}  {time.time() - t0:.0f}s", flush=True)
