@@ -22,8 +22,16 @@ jobs:
             python-version: "3.11"
           - os: ubuntu-latest
             python-version: "3.13"
+          - os: ubuntu-latest
+            python-version: "3.14"
+          - os: ubuntu-latest
+            python-version: "3.15"
           - os: windows-latest
             python-version: "3.13"
+          - os: windows-latest
+            python-version: "3.14"
+          - os: windows-latest
+            python-version: "3.15"
     env:
       OMP_NUM_THREADS: "2"
       PYTHONIOENCODING: utf-8
@@ -33,6 +41,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          allow-prereleases: true     # the newest interpreter may still be a pre-release on the runners
           cache: pip
           cache-dependency-path: requirements-ci.txt
 
