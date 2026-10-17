@@ -1,0 +1,13 @@
+dataset,n_train,method,finetune
+cb,840,soft CE,1.680 ± 0.020
+cb,840,soft-CORAL,1.742 ± 0.014
+cb,840,soft-CORN,1.682 ± 0.039
+humicroedit,2048,soft CE,1.252 ± 0.009
+humicroedit,2048,soft-CORAL,1.237 ± 0.012
+humicroedit,2048,soft-CORN,1.251 ± 0.022
+mhs,2048,soft CE,1.008 ± 0.025
+mhs,2048,soft-CORAL,1.075 ± 0.034
+mhs,2048,soft-CORN,1.012 ± 0.029
+wikitox,2048,soft CE,0.945 ± 0.011
+wikitox,2048,soft-CORAL,0.990 ± 0.002
+wikitox,2048,soft-CORN,0.944 ± 0.007

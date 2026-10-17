@@ -1,0 +1,31 @@
+dataset,n_train,method,finetune,linear
+cb,512,soft CE,7.589 ± 0.249,7.259 ± 0.339
+cb,512,soft-CORAL,7.321 ± 0.202,7.490 ± 0.339
+cb,512,soft-CORN,7.611 ± 0.292,7.355 ± 0.338
+cb,840,soft CE,7.412 ± 0.374,7.291 ± 0.290
+cb,840,soft-CORAL,7.200 ± 0.417,7.508 ± 0.259
+cb,840,soft-CORN,7.350 ± 0.272,7.316 ± 0.312
+humicroedit,512,soft CE,3.917 ± 0.037,3.881 ± 0.050
+humicroedit,512,soft-CORAL,3.923 ± 0.061,3.912 ± 0.059
+humicroedit,512,soft-CORN,3.906 ± 0.054,3.884 ± 0.051
+humicroedit,2048,soft CE,4.025 ± 0.151,3.906 ± 0.043
+humicroedit,2048,soft-CORAL,3.983 ± 0.115,3.952 ± 0.042
+humicroedit,2048,soft-CORN,3.997 ± 0.128,3.934 ± 0.060
+mhs,512,soft CE,3.556 ± 0.102,3.549 ± 0.120
+mhs,512,soft-CORAL,3.736 ± 0.098,3.599 ± 0.107
+mhs,512,soft-CORN,3.591 ± 0.109,3.558 ± 0.102
+mhs,2048,soft CE,3.585 ± 0.136,3.547 ± 0.089
+mhs,2048,soft-CORAL,3.441 ± 0.138,3.502 ± 0.090
+mhs,2048,soft-CORN,3.600 ± 0.088,3.532 ± 0.099
+scut,512,soft CE,3.476 ± 0.051,3.405 ± 0.037
+scut,512,soft-CORAL,3.415 ± 0.061,3.372 ± 0.048
+scut,512,soft-CORN,3.437 ± 0.077,3.387 ± 0.041
+scut,2048,soft CE,3.483 ± 0.095,3.349 ± 0.020
+scut,2048,soft-CORAL,3.417 ± 0.037,3.375 ± 0.040
+scut,2048,soft-CORN,3.463 ± 0.070,3.340 ± 0.036
+wikitox,512,soft CE,2.974 ± 0.037,3.053 ± 0.036
+wikitox,512,soft-CORAL,3.031 ± 0.036,3.126 ± 0.053
+wikitox,512,soft-CORN,2.947 ± 0.049,3.058 ± 0.039
+wikitox,2048,soft CE,2.906 ± 0.058,2.985 ± 0.028
+wikitox,2048,soft-CORAL,2.951 ± 0.023,3.045 ± 0.042
+wikitox,2048,soft-CORN,2.975 ± 0.034,2.970 ± 0.031

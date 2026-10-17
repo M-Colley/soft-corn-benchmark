@@ -1,0 +1,3 @@
+baseline,problems,mean_diff,se_diff,median_diff,wins,ties,losses,p_better,p_rope,p_worse
+soft-CORAL,1,-0.0018540225923061372,,-0.0018540225923061372,0,1,0,0.0,1.0,0.0
+soft CE,1,0.009902874380350113,,0.009902874380350113,0,1,0,0.0,0.46062,0.53938

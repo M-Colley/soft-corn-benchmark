@@ -1,0 +1,7 @@
+dataset,n_train,method,finetune,linear
+cb,840,soft CE,1.701 ± 0.040,1.845 ± 0.011
+cb,840,soft-CORAL,1.796 ± 0.040,1.842 ± 0.012
+cb,840,soft-CORN,1.723 ± 0.020,1.840 ± 0.009
+scut,2048,soft CE,1.177 ± nan,1.092 ± 0.009
+scut,2048,soft-CORAL,1.177 ± nan,1.085 ± 0.008
+scut,2048,soft-CORN,1.235 ± nan,1.090 ± 0.011

@@ -1,0 +1,4 @@
+dataset,n_train,method,finetune
+scut,2048,soft CE,0.125 ± 0.003
+scut,2048,soft-CORAL,0.135 ± 0.003
+scut,2048,soft-CORN,0.132 ± 0.009

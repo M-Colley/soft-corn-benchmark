@@ -1,0 +1,16 @@
+dataset,n_train,method,finetune,linear
+cb,840,soft CE,1.778 ± 0.027,1.844 ± 0.012
+cb,840,soft-CORAL,1.810 ± 0.030,1.848 ± 0.020
+cb,840,soft-CORN,1.752 ± 0.027,1.840 ± 0.013
+humicroedit,2048,soft CE,1.262 ± 0.012,1.258 ± 0.006
+humicroedit,2048,soft-CORAL,1.263 ± 0.014,1.255 ± 0.005
+humicroedit,2048,soft-CORN,1.263 ± 0.003,1.252 ± 0.006
+mhs,2048,soft CE,1.128 ± 0.011,1.132 ± 0.006
+mhs,2048,soft-CORAL,1.104 ± 0.007,1.136 ± 0.004
+mhs,2048,soft-CORN,1.107 ± 0.013,1.133 ± 0.006
+scut,2048,soft CE,1.107 ± 0.013,1.091 ± 0.007
+scut,2048,soft-CORAL,1.084 ± 0.011,1.088 ± 0.009
+scut,2048,soft-CORN,1.104 ± 0.016,1.089 ± 0.008
+wikitox,2048,soft CE,1.023 ± 0.023,1.035 ± 0.007
+wikitox,2048,soft-CORAL,1.025 ± 0.003,1.049 ± 0.006
+wikitox,2048,soft-CORN,1.025 ± 0.007,1.034 ± 0.007

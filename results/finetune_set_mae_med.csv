@@ -1,16 +1,71 @@
-dataset,method,finetune,linear
-cb,soft CE,0.528 ± 0.058,0.818 ± 0.095
-cb,soft-CORAL,0.700 ± 0.042,0.867 ± 0.049
-cb,soft-CORN,0.593 ± 0.010,0.918 ± 0.072
-humicroedit,soft CE,0.284 ± 0.001,0.295 ± 0.012
-humicroedit,soft-CORAL,0.285 ± 0.008,0.304 ± 0.009
-humicroedit,soft-CORN,0.285 ± 0.005,0.259 ± 0.004
-mhs,soft CE,0.182 ± 0.013,0.229 ± 0.006
-mhs,soft-CORAL,0.208 ± 0.012,0.244 ± 0.007
-mhs,soft-CORN,0.183 ± 0.008,0.227 ± 0.008
-scut,soft CE,0.127 ± 0.013,0.128 ± 0.010
-scut,soft-CORAL,0.138 ± 0.006,0.134 ± 0.007
-scut,soft-CORN,0.124 ± 0.010,0.128 ± 0.014
-wikitox,soft CE,0.113 ± 0.005,0.145 ± 0.007
-wikitox,soft-CORAL,0.134 ± 0.003,0.160 ± 0.006
-wikitox,soft-CORN,0.117 ± 0.006,0.143 ± 0.005
+dataset,n_train,method,finetune,linear
+cb,512,CORN (hard),,0.874 ± 0.028
+cb,512,OLDL-QFD,,0.865 ± 0.086
+cb,512,PLL-CORN,,0.833 ± 0.063
+cb,512,soft CE,0.626 ± 0.076,0.836 ± 0.068
+cb,512,soft-CORAL,0.773 ± 0.026,0.874 ± 0.073
+cb,512,soft-CORN,0.658 ± 0.017,0.838 ± 0.039
+cb,512,soft-OR,,0.850 ± 0.042
+cb,840,CORN (hard),0.732 ± 0.063,0.872 ± 0.049
+cb,840,OLDL-QFD,0.558 ± 0.036,0.833 ± 0.060
+cb,840,PLL-CORN,0.541 ± 0.048,0.892 ± 0.106
+cb,840,soft CE,0.556 ± 0.041,0.835 ± 0.070
+cb,840,soft-CORAL,0.642 ± 0.054,0.889 ± 0.058
+cb,840,soft-CORN,0.570 ± 0.069,0.890 ± 0.056
+cb,840,soft-OR,0.561 ± 0.032,0.871 ± 0.042
+humicroedit,512,CORN (hard),,0.267 ± 0.010
+humicroedit,512,OLDL-QFD,,0.303 ± 0.014
+humicroedit,512,PLL-CORN,,0.264 ± 0.012
+humicroedit,512,soft CE,0.336 ± 0.014,0.308 ± 0.012
+humicroedit,512,soft-CORAL,0.308 ± 0.008,0.318 ± 0.012
+humicroedit,512,soft-CORN,0.316 ± 0.007,0.273 ± 0.011
+humicroedit,512,soft-OR,,0.308 ± 0.015
+humicroedit,2048,CORN (hard),0.258 ± 0.007,0.255 ± 0.007
+humicroedit,2048,OLDL-QFD,0.276 ± 0.010,0.288 ± 0.007
+humicroedit,2048,PLL-CORN,0.255 ± 0.013,0.255 ± 0.007
+humicroedit,2048,soft CE,0.284 ± 0.008,0.300 ± 0.012
+humicroedit,2048,soft-CORAL,0.277 ± 0.011,0.304 ± 0.010
+humicroedit,2048,soft-CORN,0.285 ± 0.006,0.258 ± 0.007
+humicroedit,2048,soft-OR,0.287 ± 0.012,0.302 ± 0.003
+mhs,512,CORN (hard),,0.326 ± 0.016
+mhs,512,OLDL-QFD,,0.258 ± 0.011
+mhs,512,PLL-CORN,,0.242 ± 0.009
+mhs,512,soft CE,0.218 ± 0.026,0.254 ± 0.008
+mhs,512,soft-CORAL,0.244 ± 0.004,0.259 ± 0.008
+mhs,512,soft-CORN,0.219 ± 0.007,0.263 ± 0.008
+mhs,512,soft-OR,,0.243 ± 0.009
+mhs,2048,CORN (hard),0.249 ± 0.016,0.314 ± 0.014
+mhs,2048,OLDL-QFD,0.182 ± 0.008,0.231 ± 0.008
+mhs,2048,PLL-CORN,0.187 ± 0.004,0.218 ± 0.010
+mhs,2048,soft CE,0.180 ± 0.009,0.226 ± 0.005
+mhs,2048,soft-CORAL,0.210 ± 0.008,0.242 ± 0.005
+mhs,2048,soft-CORN,0.182 ± 0.008,0.223 ± 0.008
+mhs,2048,soft-OR,0.186 ± 0.008,0.225 ± 0.008
+scut,512,CORN (hard),,0.245 ± 0.021
+scut,512,OLDL-QFD,,0.140 ± 0.008
+scut,512,PLL-CORN,,0.143 ± 0.012
+scut,512,soft CE,0.140 ± 0.014,0.138 ± 0.007
+scut,512,soft-CORAL,0.145 ± 0.015,0.140 ± 0.011
+scut,512,soft-CORN,0.133 ± 0.011,0.140 ± 0.010
+scut,512,soft-OR,,0.134 ± 0.010
+scut,2048,CORN (hard),0.190 ± 0.021,0.223 ± 0.007
+scut,2048,OLDL-QFD,0.131 ± 0.010,0.129 ± 0.011
+scut,2048,PLL-CORN,0.133 ± 0.012,0.130 ± 0.006
+scut,2048,soft CE,0.131 ± 0.012,0.129 ± 0.008
+scut,2048,soft-CORAL,0.140 ± 0.015,0.139 ± 0.010
+scut,2048,soft-CORN,0.126 ± 0.009,0.130 ± 0.011
+scut,2048,soft-OR,0.133 ± 0.009,0.127 ± 0.009
+wikitox,512,CORN (hard),,0.158 ± 0.003
+wikitox,512,OLDL-QFD,,0.159 ± 0.004
+wikitox,512,PLL-CORN,,0.153 ± 0.005
+wikitox,512,soft CE,0.138 ± 0.004,0.154 ± 0.004
+wikitox,512,soft-CORAL,0.173 ± 0.011,0.167 ± 0.005
+wikitox,512,soft-CORN,0.139 ± 0.006,0.153 ± 0.005
+wikitox,512,soft-OR,,0.149 ± 0.004
+wikitox,2048,CORN (hard),0.144 ± 0.009,0.152 ± 0.004
+wikitox,2048,OLDL-QFD,0.122 ± 0.002,0.147 ± 0.005
+wikitox,2048,PLL-CORN,0.120 ± 0.003,0.139 ± 0.004
+wikitox,2048,soft CE,0.118 ± 0.008,0.143 ± 0.006
+wikitox,2048,soft-CORAL,0.129 ± 0.008,0.159 ± 0.006
+wikitox,2048,soft-CORN,0.118 ± 0.007,0.141 ± 0.005
+wikitox,2048,soft-OR,0.121 ± 0.004,0.142 ± 0.005

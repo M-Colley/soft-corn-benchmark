@@ -1,0 +1,19 @@
+selected_by,parameterisation,target,problems,mean_diff,wins,ties,losses,p_better,p_rope,p_worse
+nll,corn,"soft-CORN, empirical",30,-0.0024915659427642823,7,23,0,0.17254,0.82746,0.0
+nll,corn,"soft-CORN, 50/50",30,-0.002153817812601725,13,17,0,0.4906,0.5094,0.0
+nll,corn,"CORN, exact likelihood",30,-0.0006190792719523113,8,21,1,0.0006,0.9994,0.0
+nll,softmax,"soft CE, empirical",30,-0.0024578837553660077,8,22,0,0.32548,0.67452,0.0
+nll,softmax,"soft CE, 50/50",30,-0.0022104986508687335,10,20,0,0.29968,0.70032,0.0
+nll,softmax,"softmax, exact likelihood",30,-0.001429917017618815,9,19,2,0.14802,0.8517,0.00028
+nll,coral,"soft-CORAL, empirical",30,-0.001768678426742554,10,20,0,0.0873,0.9127,0.0
+nll,coral,"soft-CORAL, 50/50",30,-0.0013574767112731934,11,19,0,0.03078,0.96922,0.0
+nll,coral,"CORAL, exact likelihood",30,-0.0017158246040344237,12,17,1,0.06616,0.93384,0.0
+xnll,corn,"soft-CORN, empirical",30,-0.006670758724212646,19,11,0,0.94356,0.05644,0.0
+xnll,corn,"soft-CORN, 50/50",30,-0.004589223066965739,19,11,0,0.8271,0.1729,0.0
+xnll,corn,"CORN, exact likelihood",30,-0.006046797037124634,18,12,0,0.91268,0.08732,0.0
+xnll,softmax,"soft CE, empirical",30,-0.007108755509058635,19,11,0,0.96538,0.03462,0.0
+xnll,softmax,"soft CE, 50/50",30,-0.004856828053792317,20,10,0,0.85866,0.14134,0.0
+xnll,softmax,"softmax, exact likelihood",30,-0.006640885670979818,19,10,1,0.97396,0.02604,0.0
+xnll,coral,"soft-CORAL, empirical",30,-0.003220985730489095,12,18,0,0.35708,0.64292,0.0
+xnll,coral,"soft-CORAL, 50/50",30,-0.0022632980346679685,16,14,0,0.16942,0.83058,0.0
+xnll,coral,"CORAL, exact likelihood",30,-0.0031130556265513095,15,14,1,0.369,0.631,0.0

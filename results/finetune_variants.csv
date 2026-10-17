@@ -1,0 +1,181 @@
+variant,metric,baseline,dataset,n_train,diff,seeds
+finetune,nll,soft-CORAL,cb,512,-0.08557407855987553,10
+finetune,nll,soft-CORAL,cb,840,-0.07788323163986188,10
+finetune,nll,soft-CORAL,humicroedit,512,0.0012096881866454634,10
+finetune,nll,soft-CORAL,humicroedit,2048,0.0005004882812500444,10
+finetune,nll,soft-CORAL,mhs,512,-0.07152824401855473,10
+finetune,nll,soft-CORAL,mhs,2048,-0.08298399448394789,10
+finetune,nll,soft-CORAL,scut,512,-0.0402146577835083,10
+finetune,nll,soft-CORAL,scut,2048,-0.04875489473342909,10
+finetune,nll,soft-CORAL,wikitox,512,-0.044321322441100985,10
+finetune,nll,soft-CORAL,wikitox,2048,-0.04383251070976257,10
+finetune,nll,soft CE,cb,512,0.014006090164184526,10
+finetune,nll,soft CE,cb,840,0.011666727066040217,10
+finetune,nll,soft CE,humicroedit,512,-0.0014235734939573863,10
+finetune,nll,soft CE,humicroedit,2048,-0.004261910915374756,10
+finetune,nll,soft CE,mhs,512,-0.000976896286010831,10
+finetune,nll,soft CE,mhs,2048,0.0039497852325438565,10
+finetune,nll,soft CE,scut,512,-0.005119538307189808,10
+finetune,nll,soft CE,scut,2048,-0.0033391714096069336,10
+finetune,nll,soft CE,wikitox,512,-0.006975388526916371,10
+finetune,nll,soft CE,wikitox,2048,0.00015605688095088333,10
+finetune,set_mae_med,soft-CORAL,cb,512,-0.11583335399627681,10
+finetune,set_mae_med,soft-CORAL,cb,840,-0.07208334505558023,10
+finetune,set_mae_med,soft-CORAL,humicroedit,512,0.007817155122756936,10
+finetune,set_mae_med,soft-CORAL,humicroedit,2048,0.008280888199806213,10
+finetune,set_mae_med,soft-CORAL,mhs,512,-0.02559077739715576,10
+finetune,set_mae_med,soft-CORAL,mhs,2048,-0.027579252421855938,10
+finetune,set_mae_med,soft-CORAL,scut,512,-0.011454549431800853,10
+finetune,set_mae_med,soft-CORAL,scut,2048,-0.013999999314546596,10
+finetune,set_mae_med,soft-CORAL,wikitox,512,-0.03437499701976776,10
+finetune,set_mae_med,soft-CORAL,wikitox,2048,-0.010187501460313803,10
+finetune,set_mae_med,soft CE,cb,512,0.03166666030883791,10
+finetune,set_mae_med,soft CE,cb,840,0.013333323597907953,10
+finetune,set_mae_med,soft CE,humicroedit,512,-0.02066909670829775,10
+finetune,set_mae_med,soft CE,humicroedit,2048,0.0013580650091171709,10
+finetune,set_mae_med,soft CE,mhs,512,0.00046109557151796654,10
+finetune,set_mae_med,soft CE,mhs,2048,0.001902018487453444,10
+finetune,set_mae_med,soft CE,scut,512,-0.006909093260765081,10
+finetune,set_mae_med,soft CE,scut,2048,-0.0050909072160720825,10
+finetune,set_mae_med,soft CE,wikitox,512,0.0008249998092651478,10
+finetune,set_mae_med,soft CE,wikitox,2048,3.749802708624683e-05,10
+finetune_deberta,nll,soft-CORAL,cb,840,-0.03848695755004883,3
+finetune_deberta,nll,soft-CORAL,humicroedit,2048,0.006835897763570076,3
+finetune_deberta,nll,soft-CORAL,mhs,2048,-0.0821380615234375,3
+finetune_deberta,nll,soft-CORAL,wikitox,2048,-0.034161825974782345,3
+finetune_deberta,nll,soft CE,cb,840,0.024133245150248284,3
+finetune_deberta,nll,soft CE,humicroedit,2048,-0.0065419673919677734,3
+finetune_deberta,nll,soft CE,mhs,2048,-0.008014440536499023,3
+finetune_deberta,nll,soft CE,wikitox,2048,-0.0010821223258972168,3
+finetune_deberta,set_mae_med,soft-CORAL,cb,840,-0.06249999006589252,3
+finetune_deberta,set_mae_med,soft-CORAL,humicroedit,2048,0.019653300444285093,3
+finetune_deberta,set_mae_med,soft-CORAL,mhs,2048,-0.017675310373306274,3
+finetune_deberta,set_mae_med,soft-CORAL,wikitox,2048,-0.008958329757054656,3
+finetune_deberta,set_mae_med,soft CE,cb,840,-0.029166648785273253,3
+finetune_deberta,set_mae_med,soft CE,humicroedit,2048,0.04217730959256488,3
+finetune_deberta,set_mae_med,soft CE,mhs,2048,-0.0039385209480921335,3
+finetune_deberta,set_mae_med,soft CE,wikitox,2048,0.0009166697661081996,3
+finetune_deberta_lpft,nll,soft-CORAL,cb,840,0.022077878316243416,3
+finetune_deberta_lpft,nll,soft-CORAL,humicroedit,2048,-0.003256996472676521,3
+finetune_deberta_lpft,nll,soft-CORAL,mhs,2048,-0.0103607177734375,3
+finetune_deberta_lpft,nll,soft-CORAL,wikitox,2048,-0.017251332600911384,3
+finetune_deberta_lpft,nll,soft CE,cb,840,0.013756116231282478,3
+finetune_deberta_lpft,nll,soft CE,humicroedit,2048,-3.9021174113029744e-05,3
+finetune_deberta_lpft,nll,soft CE,mhs,2048,-0.02993158499399806,3
+finetune_deberta_lpft,nll,soft CE,wikitox,2048,0.01021786530812574,3
+finetune_deberta_lpft,set_mae_med,soft-CORAL,cb,840,-0.08472222089767456,3
+finetune_deberta_lpft,set_mae_med,soft-CORAL,humicroedit,2048,0.011262009541193663,3
+finetune_deberta_lpft,set_mae_med,soft-CORAL,mhs,2048,-0.008837660153706878,3
+finetune_deberta_lpft,set_mae_med,soft-CORAL,wikitox,2048,-0.005249996980031341,3
+finetune_deberta_lpft,set_mae_med,soft CE,cb,840,0.03333334128061932,3
+finetune_deberta_lpft,set_mae_med,soft CE,humicroedit,2048,0.008391300837198912,3
+finetune_deberta_lpft,set_mae_med,soft CE,mhs,2048,-0.004610950748125731,3
+finetune_deberta_lpft,set_mae_med,soft CE,wikitox,2048,0.00033333897590637207,3
+finetune_dinov2,nll,soft-CORAL,scut,2048,-0.03113400936126709,3
+finetune_dinov2,nll,soft CE,scut,2048,-0.010253032048543442,3
+finetune_dinov2,set_mae_med,soft-CORAL,scut,2048,-0.015757578114668547,3
+finetune_dinov2,set_mae_med,soft CE,scut,2048,0.005757575233777346,3
+finetune_dinov2_lpft,nll,soft-CORAL,scut,2048,0.028229594230651855,3
+finetune_dinov2_lpft,nll,soft CE,scut,2048,0.004196524620056152,3
+finetune_dinov2_lpft,set_mae_med,soft-CORAL,scut,2048,-0.005757575233777373,3
+finetune_dinov2_lpft,set_mae_med,soft CE,scut,2048,0.0024242450793584003,3
+finetune_lpft,nll,soft-CORAL,cb,512,-0.018085694313049405,10
+finetune_lpft,nll,soft-CORAL,cb,840,-0.02938554286956796,10
+finetune_lpft,nll,soft-CORAL,humicroedit,512,0.00116255283355704,10
+finetune_lpft,nll,soft-CORAL,humicroedit,2048,0.0018011212348938432,10
+finetune_lpft,nll,soft-CORAL,mhs,512,-0.040055370330810636,10
+finetune_lpft,nll,soft-CORAL,mhs,2048,0.012863218784332275,10
+finetune_lpft,nll,soft-CORAL,scut,512,0.00025179386138907134,10
+finetune_lpft,nll,soft-CORAL,scut,2048,0.01285463571548462,10
+finetune_lpft,nll,soft-CORAL,wikitox,512,-0.03426713943481463,10
+finetune_lpft,nll,soft-CORAL,wikitox,2048,0.00032111406326285064,10
+finetune_lpft,nll,soft CE,cb,512,-0.015738511085510165,10
+finetune_lpft,nll,soft CE,cb,840,-0.02745243310928358,10
+finetune_lpft,nll,soft CE,humicroedit,512,-0.003367042541503995,10
+finetune_lpft,nll,soft CE,humicroedit,2048,-0.005243384838104159,10
+finetune_lpft,nll,soft CE,mhs,512,-0.018002176284790172,10
+finetune_lpft,nll,soft CE,mhs,2048,0.0007354259490965909,10
+finetune_lpft,nll,soft CE,scut,512,-0.010758900642395153,10
+finetune_lpft,nll,soft CE,scut,2048,-0.012873685359954923,10
+finetune_lpft,nll,soft CE,wikitox,512,-0.018453884124755904,10
+finetune_lpft,nll,soft CE,wikitox,2048,0.018980431556701705,10
+finetune_lpft,set_mae_med,soft-CORAL,cb,512,-0.09416667222976682,10
+finetune_lpft,set_mae_med,soft-CORAL,cb,840,-0.042916673421859675,10
+finetune_lpft,set_mae_med,soft-CORAL,humicroedit,512,0.004637306928634677,10
+finetune_lpft,set_mae_med,soft-CORAL,humicroedit,2048,0.0011262029409408458,10
+finetune_lpft,set_mae_med,soft-CORAL,mhs,512,-0.031066283583641052,10
+finetune_lpft,set_mae_med,soft-CORAL,mhs,2048,-0.0029971212148666437,10
+finetune_lpft,set_mae_med,soft-CORAL,scut,512,-0.00490909069776535,10
+finetune_lpft,set_mae_med,soft-CORAL,scut,2048,-0.008818182349205034,10
+finetune_lpft,set_mae_med,soft-CORAL,wikitox,512,-0.015425002574920632,10
+finetune_lpft,set_mae_med,soft-CORAL,wikitox,2048,0.0005874991416931208,10
+finetune_lpft,set_mae_med,soft CE,cb,512,-0.06583333015441895,10
+finetune_lpft,set_mae_med,soft CE,cb,840,0.009583330154419034,10
+finetune_lpft,set_mae_med,soft CE,humicroedit,512,0.014110636711120617,10
+finetune_lpft,set_mae_med,soft CE,humicroedit,2048,-0.003014233708381664,10
+finetune_lpft,set_mae_med,soft CE,mhs,512,-0.011412104964256264,10
+finetune_lpft,set_mae_med,soft CE,mhs,2048,-0.0014121055603027177,10
+finetune_lpft,set_mae_med,soft CE,scut,512,-0.006545454263687134,10
+finetune_lpft,set_mae_med,soft CE,scut,2048,-0.0010000005364418085,10
+finetune_lpft,set_mae_med,soft CE,wikitox,512,-0.006700000166892983,10
+finetune_lpft,set_mae_med,soft CE,wikitox,2048,0.005749998986721044,10
+finetune_lpft_tuned,nll,soft-CORAL,cb,840,-0.057688236236572266,5
+finetune_lpft_tuned,nll,soft-CORAL,humicroedit,2048,-0.0006872177124022105,5
+finetune_lpft_tuned,nll,soft-CORAL,mhs,2048,0.0029952526092529297,5
+finetune_lpft_tuned,nll,soft-CORAL,scut,2048,0.020500159263610707,5
+finetune_lpft_tuned,nll,soft-CORAL,wikitox,2048,0.00024759769439697266,5
+finetune_lpft_tuned,nll,soft CE,cb,840,-0.025553226470947266,5
+finetune_lpft_tuned,nll,soft CE,humicroedit,2048,0.00029895305633553804,5
+finetune_lpft_tuned,nll,soft CE,mhs,2048,-0.020566010475158825,5
+finetune_lpft_tuned,nll,soft CE,scut,2048,-0.0029783248901367188,5
+finetune_lpft_tuned,nll,soft CE,wikitox,2048,0.0016088485717773438,5
+finetune_lpft_tuned,set_mae_med,soft-CORAL,cb,840,-0.07250001430511477,5
+finetune_lpft_tuned,set_mae_med,soft-CORAL,humicroedit,2048,0.0024511396884918657,5
+finetune_lpft_tuned,set_mae_med,soft-CORAL,mhs,2048,-0.005129680037498474,5
+finetune_lpft_tuned,set_mae_med,soft-CORAL,scut,2048,-0.007454545795917519,5
+finetune_lpft_tuned,set_mae_med,soft-CORAL,wikitox,2048,0.002175000309944136,5
+finetune_lpft_tuned,set_mae_med,soft CE,cb,840,0.013333332538604803,5
+finetune_lpft_tuned,set_mae_med,soft CE,humicroedit,2048,-6.624460220333583e-05,5
+finetune_lpft_tuned,set_mae_med,soft CE,mhs,2048,-0.004438036680221552,5
+finetune_lpft_tuned,set_mae_med,soft CE,scut,2048,0.0016363635659217834,5
+finetune_lpft_tuned,set_mae_med,soft CE,wikitox,2048,0.002200001478195185,5
+finetune_roberta_large,nll,soft-CORAL,cb,840,-0.03393201033274318,3
+finetune_roberta_large,nll,soft-CORAL,humicroedit,2048,0.007515748341878181,3
+finetune_roberta_large,nll,soft-CORAL,mhs,2048,-0.08627061049143481,3
+finetune_roberta_large,nll,soft-CORAL,wikitox,2048,-0.04038562377293897,3
+finetune_roberta_large,nll,soft CE,cb,840,0.02301156520843506,3
+finetune_roberta_large,nll,soft CE,humicroedit,2048,-0.004005829493204827,3
+finetune_roberta_large,nll,soft CE,mhs,2048,-0.0034493207931518555,3
+finetune_roberta_large,nll,soft CE,wikitox,2048,-0.003391444683074951,3
+finetune_roberta_large,set_mae_med,soft-CORAL,cb,840,-0.011111140251159668,3
+finetune_roberta_large,set_mae_med,soft-CORAL,humicroedit,2048,0.021309485038121523,3
+finetune_roberta_large,set_mae_med,soft-CORAL,mhs,2048,-0.011911620696385683,3
+finetune_roberta_large,set_mae_med,soft-CORAL,wikitox,2048,-0.008583334585030869,3
+finetune_roberta_large,set_mae_med,soft CE,cb,840,-0.01249999801317847,3
+finetune_roberta_large,set_mae_med,soft CE,humicroedit,2048,0.005299776792526245,3
+finetune_roberta_large,set_mae_med,soft CE,mhs,2048,-0.0016330430905024118,3
+finetune_roberta_large,set_mae_med,soft CE,wikitox,2048,-0.0019583329558372498,3
+finetune_roberta_large_lpft,nll,soft-CORAL,cb,840,0.07138562202453613,3
+finetune_roberta_large_lpft,nll,soft-CORAL,humicroedit,2048,0.003628969192504883,3
+finetune_roberta_large_lpft,nll,soft-CORAL,mhs,2048,0.0366666316986084,3
+finetune_roberta_large_lpft,nll,soft-CORAL,wikitox,2048,-0.021902461846669552,3
+finetune_roberta_large_lpft,nll,soft CE,cb,840,-0.02596803506215406,3
+finetune_roberta_large_lpft,nll,soft CE,humicroedit,2048,-0.0027323166529336085,3
+finetune_roberta_large_lpft,nll,soft CE,mhs,2048,-0.008756518363952637,3
+finetune_roberta_large_lpft,nll,soft CE,wikitox,2048,-0.003682434558868408,3
+finetune_roberta_large_lpft,set_mae_med,soft-CORAL,cb,840,0.06805557012557983,3
+finetune_roberta_large_lpft,set_mae_med,soft-CORAL,humicroedit,2048,-0.01070995132128394,3
+finetune_roberta_large_lpft,set_mae_med,soft-CORAL,mhs,2048,0.007588858405749022,3
+finetune_roberta_large_lpft,set_mae_med,soft-CORAL,wikitox,2048,-0.004916667938232422,3
+finetune_roberta_large_lpft,set_mae_med,soft CE,cb,840,0.026388903458913204,3
+finetune_roberta_large_lpft,set_mae_med,soft CE,humicroedit,2048,-0.01534724235534668,3
+finetune_roberta_large_lpft,set_mae_med,soft CE,mhs,2048,-0.004034578800201416,3
+finetune_roberta_large_lpft,set_mae_med,soft CE,wikitox,2048,-0.0031249995032946315,3
+finetune_siglip,nll,soft-CORAL,scut,2048,-0.04211584726969386,3
+finetune_siglip,nll,soft CE,scut,2048,-0.0022019147872924805,3
+finetune_siglip,set_mae_med,soft-CORAL,scut,2048,-0.002727275093396486,3
+finetune_siglip,set_mae_med,soft CE,scut,2048,0.006666665275891631,3
+finetune_siglip_lpft,nll,soft-CORAL,scut,2048,0.024585803349812974,3
+finetune_siglip_lpft,nll,soft CE,scut,2048,0.004315177599589104,3
+finetune_siglip_lpft,set_mae_med,soft-CORAL,scut,2048,-0.008484850327173887,3
+finetune_siglip_lpft,set_mae_med,soft CE,scut,2048,-0.00030303001403808594,3
